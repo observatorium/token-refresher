@@ -1,0 +1,16 @@
+roles:
+- name: read-write
+  resources:
+  - metrics
+  tenants:
+  - test-oidc
+  permissions:
+  - read
+  - write
+roleBindings:
+- name: test
+  roles:
+  - read-write
+  subjects:
+  - name: up
+    kind: user

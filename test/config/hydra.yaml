@@ -1,0 +1,2 @@
+strategies:
+  access_token: jwt

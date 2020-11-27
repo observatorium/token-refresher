@@ -1,0 +1,73 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: golang:1.14.1
+    steps:
+      - checkout
+      - run: |
+          make token-refresher
+          git diff --exit-code
+
+  lint:
+    docker:
+      - image: golang:1.14.1
+    steps:
+      - checkout
+      - run: |
+          apt-get update && apt-get install xz-utils
+          make lint --always-make
+
+  test:
+    docker:
+      - image: golang:1.14.1
+    steps:
+      - checkout
+      - run: |
+          apt-get update && apt-get -y install xz-utils unzip openssl
+          make test --always-make
+
+  container-push:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - checkout
+      - run: |
+          echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
+          make container-push
+
+  container-release:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - checkout
+      - run: |
+          echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
+          make container-release
+
+workflows:
+  version: 2
+  test-and-push:
+    jobs:
+      - build
+      - lint
+      - test
+      - container-push:
+          requires:
+            - build
+          filters:
+            branches:
+              only:
+                - master
+  tagged-master:
+    jobs:
+      - container-release:
+          filters:
+            tags:
+              # Suggested SemVer regex:
+              # https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+              # https://regex101.com/r/vkijKf/1/
+              # NOTICE: with an additional "v" as prefix. https://regex101.com/r/ZPwiYu/1
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+            branches:
+              ignore: /.*/

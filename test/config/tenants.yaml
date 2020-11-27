@@ -1,0 +1,6 @@
+tenants:
+- name: test-oidc
+  id: 1610b0c3-c509-4592-a256-a1871353dbfa
+  oidc:
+    clientID: observatorium
+    issuerURL: http://localhost:4444/
