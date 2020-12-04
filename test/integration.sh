@@ -68,6 +68,7 @@ curl \
       --oidc.client-id=up \
       --oidc.client-secret=secret \
       --oidc.audience=observatorium \
+      --url=http://127.0.0.1:8443 \
       --file=./tmp/token
 ) &
 
@@ -82,7 +83,7 @@ until curl --output /dev/null --silent --fail http://127.0.0.1:8081/ready; do
 done
 
 echo "-------------------------------------------"
-echo "- Metrics tests                           -"
+echo "- Token File                              -"
 echo "-------------------------------------------"
 
 if up \
@@ -101,12 +102,41 @@ if up \
   --token-file=./tmp/token; then
   result=0
   echo "-------------------------------------------"
-  echo "- tests: OK                        -"
+  echo "- Token File: OK                          -"
   echo "-------------------------------------------"
 else
   result=1
   echo "-------------------------------------------"
-  echo "- tests: FAILED                   -"
+  echo "- Token File: FAILED                      -"
+  echo "-------------------------------------------"
+  exit 1
+fi
+
+echo "-------------------------------------------"
+echo "- Token Proxy                             -"
+echo "-------------------------------------------"
+
+if up \
+  --listen=0.0.0.0:8888 \
+  --endpoint-type=metrics \
+  --endpoint-read=http://127.0.0.1:8080/api/metrics/v1/test-oidc/api/v1/query \
+  --endpoint-write=http://127.0.0.1:8080/api/metrics/v1/test-oidc/api/v1/receive \
+  --period=500ms \
+  --initial-query-delay=250ms \
+  --threshold=1 \
+  --latency=10s \
+  --duration=10s \
+  --log.level=error \
+  --name=observatorium_write \
+  --labels='_id="test"'; then
+  result=0
+  echo "-------------------------------------------"
+  echo "- Token Proxy: OK                         -"
+  echo "-------------------------------------------"
+else
+  result=1
+  echo "-------------------------------------------"
+  echo "- Token Proxy: FAILED                     -"
   echo "-------------------------------------------"
   exit 1
 fi
