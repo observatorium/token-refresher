@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -209,13 +210,19 @@ func main() {
 
 		if cfg.url != nil {
 			ctx, cancel := context.WithCancel(ctx)
-			p := httputil.NewSingleHostReverseProxy(cfg.url)
+			p := httputil.ReverseProxy{
+				Director: func(request *http.Request) {
+					request.URL.Scheme = cfg.url.Scheme
+					request.Host = cfg.url.Host
+					request.URL.Host = cfg.url.Host
+				},
+			}
 			p.Transport = &oauth2.Transport{
 				Source: ccc.TokenSource(ctx),
 			}
 			s := http.Server{
 				Addr:    cfg.server.listen,
-				Handler: p,
+				Handler: &p,
 			}
 			g.Add(func() error {
 				level.Info(logger).Log("msg", "starting proxy server", "address", s.Addr)
@@ -230,4 +237,34 @@ func main() {
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash:
+		return a + "/" + b
+	}
+	return a + b
+}
+func joinURLPath(a, b *url.URL) (path, rawpath string) {
+	if a.RawPath == "" && b.RawPath == "" {
+		return singleJoiningSlash(a.Path, b.Path), ""
+	}
+	// Same as singleJoiningSlash, but uses EscapedPath to determine
+	// whether a slash should be added
+	apath := a.EscapedPath()
+	bpath := b.EscapedPath()
+	aslash := strings.HasSuffix(apath, "/")
+	bslash := strings.HasPrefix(bpath, "/")
+	switch {
+	case aslash && bslash:
+		return a.Path + b.Path[1:], apath + bpath[1:]
+	case !aslash && !bslash:
+		return a.Path + "/" + b.Path, apath + "/" + bpath
+	}
+	return a.Path + b.Path, apath + bpath
 }
