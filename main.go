@@ -209,13 +209,19 @@ func main() {
 
 		if cfg.url != nil {
 			ctx, cancel := context.WithCancel(ctx)
-			p := httputil.NewSingleHostReverseProxy(cfg.url)
+			p := httputil.ReverseProxy{
+				Director: func(request *http.Request) {
+					request.URL.Scheme = cfg.url.Scheme
+					request.Host = cfg.url.Host
+					request.URL.Host = cfg.url.Host
+				},
+			}
 			p.Transport = &oauth2.Transport{
 				Source: ccc.TokenSource(ctx),
 			}
 			s := http.Server{
 				Addr:    cfg.server.listen,
-				Handler: p,
+				Handler: &p,
 			}
 			g.Add(func() error {
 				level.Info(logger).Log("msg", "starting proxy server", "address", s.Addr)
