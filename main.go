@@ -218,36 +218,7 @@ func main() {
 					request.Host = cfg.url.Host
 					request.URL.Host = cfg.url.Host
 					// Derive path from the paths of configured URL and request URL.
-					request.URL.Path, request.URL.RawPath =
-						func(a, b *url.URL) (path, rawpath string) {
-							if a.RawPath == "" && b.RawPath == "" {
-								joinSlashes := func(a, b string) string {
-									aslash := strings.HasSuffix(a, "/")
-									bslash := strings.HasPrefix(b, "/")
-									switch {
-									case aslash && bslash:
-										return a + b[1:]
-									case !aslash && !bslash:
-										return a + "/" + b
-									}
-									return a + b
-								}(a.Path, b.Path)
-								return joinSlashes, ""
-							}
-							apath := a.EscapedPath()
-							bpath := b.EscapedPath()
-
-							aslash := strings.HasSuffix(apath, "/")
-							bslash := strings.HasPrefix(bpath, "/")
-
-							switch {
-							case aslash && bslash:
-								return a.Path + b.Path[1:], apath + bpath[1:]
-							case !aslash && !bslash:
-								return a.Path + "/" + b.Path, apath + "/" + bpath
-							}
-							return a.Path + b.Path, apath + bpath
-						}(cfg.url, request.URL)
+					request.URL.Path, request.URL.RawPath = joinURLPath(cfg.url, request.URL)
 				},
 			}
 			p.Transport = &oauth2.Transport{
@@ -270,4 +241,33 @@ func main() {
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+func singleJoiningSlash(a, b string) string {
+	aslash := strings.HasSuffix(a, "/")
+	bslash := strings.HasPrefix(b, "/")
+	switch {
+	case aslash && bslash:
+		return a + b[1:]
+	case !aslash && !bslash:
+		return a + "/" + b
+	}
+	return a + b
+}
+
+func joinURLPath(a, b *url.URL) (path, rawpath string) {
+	if a.RawPath == "" && b.RawPath == "" {
+		return singleJoiningSlash(a.Path, b.Path), ""
+	}
+	apath := a.EscapedPath()
+	bpath := b.EscapedPath()
+	aslash := strings.HasSuffix(apath, "/")
+	bslash := strings.HasPrefix(bpath, "/")
+	switch {
+	case aslash && bslash:
+		return a.Path + b.Path[1:], apath + bpath[1:]
+	case !aslash && !bslash:
+		return a.Path + "/" + b.Path, apath + "/" + bpath
+	}
+	return a.Path + b.Path, apath + bpath
 }
