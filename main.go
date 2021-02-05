@@ -214,6 +214,7 @@ func main() {
 					request.URL.Scheme = cfg.url.Scheme
 					request.Host = cfg.url.Host
 					request.URL.Host = cfg.url.Host
+					request.URL.Path = cfg.url.Path
 				},
 			}
 			p.Transport = &oauth2.Transport{
