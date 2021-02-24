@@ -20,6 +20,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/metalmatze/signal/healthcheck"
 	"github.com/metalmatze/signal/internalserver"
+	"github.com/metalmatze/signal/server/signalhttp"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
 	flag "github.com/spf13/pflag"
@@ -122,6 +123,10 @@ func main() {
 	defer level.Info(logger).Log("msg", "exiting")
 
 	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+	)
 
 	level.Info(logger).Log("msg", "token-refresher")
 	var g run.Group
@@ -226,7 +231,7 @@ func main() {
 			}
 			s := http.Server{
 				Addr:    cfg.server.listen,
-				Handler: &p,
+				Handler: signalhttp.NewHandlerInstrumenter(reg, nil).NewHandler(nil, &p),
 			}
 			g.Add(func() error {
 				level.Info(logger).Log("msg", "starting proxy server", "address", s.Addr)
