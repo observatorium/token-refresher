@@ -205,6 +205,7 @@ github.com/matttproud/golang_protobuf_extensions/pbutil
 ## explicit
 github.com/metalmatze/signal/healthcheck
 github.com/metalmatze/signal/internalserver
+github.com/metalmatze/signal/server/signalhttp
 # github.com/mitchellh/mapstructure v1.3.2
 ## explicit
 github.com/mitchellh/mapstructure
