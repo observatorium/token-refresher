@@ -38,6 +38,7 @@ type config struct {
 	logFormat string
 	margin    time.Duration
 	name      string
+	tempFile  string
 	url       *url.URL
 
 	oidc   oidcConfig
@@ -68,6 +69,7 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.oidc.clientID, "oidc.client-id", "", "The OIDC client ID, see https://tools.ietf.org/html/rfc6749#section-2.3.")
 	flag.StringVar(&cfg.oidc.audience, "oidc.audience", "", "The audience for whom the access token is intended, see https://openid.net/specs/openid-connect-core-1_0.html#IDToken.")
 	flag.StringVar(&cfg.file, "file", "", "The path to the file in which to write the retrieved token.")
+	flag.StringVar(&cfg.tempFile, "temp-file", "", "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
 	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
 	flag.DurationVar(&cfg.margin, "margin", 5*time.Minute, "The margin of time before a token expires to try to refresh it.")
 
@@ -96,6 +98,10 @@ func parseFlags() (*config, error) {
 
 	if cfg.file == "" && cfg.url == nil {
 		return nil, errors.New("one of --file or --url is required")
+	}
+
+	if cfg.tempFile == "" {
+		cfg.tempFile = cfg.file + ".tmp"
 	}
 
 	return cfg, nil
@@ -196,11 +202,15 @@ func main() {
 					case !t.Valid():
 						level.Error(logger).Log("msg", "token is invalid", "exp", t.Expiry.String())
 					default:
-						if err := ioutil.WriteFile(cfg.file, []byte(t.AccessToken), 0644); err != nil {
-							level.Error(logger).Log("msg", "failed to write token to disk", "err", err)
-						} else {
-							d = t.Expiry.Sub(time.Now()) - cfg.margin
+						if err := ioutil.WriteFile(cfg.tempFile, []byte(t.AccessToken), 0644); err != nil {
+							level.Error(logger).Log("msg", "failed to write token to temporary file", "err", err)
+							break
 						}
+						if err := os.Rename(cfg.tempFile, cfg.file); err != nil {
+							level.Error(logger).Log("msg", "failed to write token to file", "err", err)
+							break
+						}
+						d = t.Expiry.Sub(time.Now()) - cfg.margin
 					}
 					select {
 					case <-time.NewTimer(d).C:
