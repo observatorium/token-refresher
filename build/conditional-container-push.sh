@@ -16,23 +16,32 @@ usage() {
 #
 # This function cribbed from:
 # https://github.com/openshift/boilerplate/blob/d2d6640ef28a7ce54ac639db32c825aa4bb492a0/boilerplate/_lib/common.sh#L77-L125
+# ...then adapted to use docker rather than skopeo.
 image_exists_in_repo() {
     local image_uri=$1
     local output
 
-    if output=$(skopeo inspect docker://"${image_uri}" 2>&1); then
+    if output=$(docker image pull "${image_uri}" 2>&1); then
         # The image exists. Sanity check the output.
-        local digest
-        digest=$(jq -r .Digest <<< "$output")
-        if [[ -z "$digest" ]]; then
-            echo "Unexpected error: skopeo inspect succeeded, but output contained no .Digest"
-            echo "Here's the output:"
-            echo "$output"
-            exit 1
+        local report
+        if report=$(docker image inspect "${image_uri}" 2>&1); then
+            local digest
+            digest=$(jq -r '.[].RepoDigests[0]' <<< "$report")
+            if [[ "$digest" != *@* ]]; then
+                echo "Unexpected error: docker inspect succeeded, but output contained no digest."
+                echo "Here's the inspect output:"
+                echo "$report"
+                exit 1
+            fi
+            # Happy path: image exists
+            echo "Image ${image_uri} exists with digest $digest."
+            return 0
         fi
-        echo "Image ${image_uri} exists with digest $digest."
-        return 0
-    elif [[ "$output" == *"manifest unknown"* ]]; then
+        echo "Unexpected error: docker inspect failed after docker pull succeded."
+        echo "Here's the output:"
+        echo "$report"
+        exit 1
+    elif [[ "$output" == *"manifest for"*"not found"* ]]; then
         # We were able to talk to the repository, but the tag doesn't exist.
         # This is the normal "green field" case.
         echo "Image ${image_uri} does not exist in the repository."
