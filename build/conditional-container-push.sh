@@ -15,13 +15,21 @@ usage() {
 # If the query fails for any reason, prints an error and *exits* nonzero.
 #
 # This function cribbed from:
-# https://github.com/openshift/boilerplate/blob/d2d6640ef28a7ce54ac639db32c825aa4bb492a0/boilerplate/_lib/common.sh#L77-L125
+# https://github.com/openshift/boilerplate/blob/0ba6566d544d0df9993a92b2286c131eb61f3e88/boilerplate/_lib/common.sh#L77-L135
 # ...then adapted to use docker rather than skopeo.
 image_exists_in_repo() {
     local image_uri=$1
     local output
+    local rc
+    local skopeo_stderr
 
-    if output=$(docker image pull "${image_uri}" 2>&1); then
+    skopeo_stderr=$(mktemp)
+    output=$(docker image pull "${image_uri}" 2>"$skopeo_stderr")
+    rc=$?
+    # So we can delete the temp file right away...
+    stderr=$(cat "$skopeo_stderr")
+    rm -f "$skopeo_stderr"
+    if [[ $rc -eq 0 ]]; then
         # The image exists. Sanity check the output.
         local report
         if report=$(docker image inspect "${image_uri}" 2>&1); then
@@ -31,6 +39,8 @@ image_exists_in_repo() {
                 echo "Unexpected error: docker inspect succeeded, but output contained no digest."
                 echo "Here's the inspect output:"
                 echo "$report"
+                echo "...and stderr:"
+                echo "$stderr"
                 exit 1
             fi
             # Happy path: image exists
@@ -41,12 +51,12 @@ image_exists_in_repo() {
         echo "Here's the output:"
         echo "$report"
         exit 1
-    elif [[ "$output" == *"manifest for"*"not found"* ]]; then
+    elif [[ "$stderr" == *"manifest for"*"not found"* ]]; then
         # We were able to talk to the repository, but the tag doesn't exist.
         # This is the normal "green field" case.
         echo "Image ${image_uri} does not exist in the repository."
         return 1
-    elif [[ "$output" == *"was deleted or has expired"* ]]; then
+    elif [[ "$stderr" == *"was deleted or has expired"* ]]; then
         # This should be rare, but accounts for cases where we had to
         # manually delete an image.
         echo "Image ${image_uri} was deleted from the repository."
@@ -62,7 +72,8 @@ image_exists_in_repo() {
         # In all these cases, we want to bail, because we don't know whether
         # the image exists (and we'd likely fail to push it anyway).
         echo "Error querying the repository for ${image_uri}:"
-        echo "$output"
+        echo "stdout: $output"
+        echo "stderr: $stderr"
         exit 1
     fi
 }
