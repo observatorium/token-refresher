@@ -1,4 +1,4 @@
-// These are the defaults for this components configuration.
+// These are the defaults for this component's configuration.
 // When calling the function to generate the component's manifest,
 // you can pass an object structured like the default to overwrite default values.
 local defaults = {
@@ -7,18 +7,16 @@ local defaults = {
   image: 'quay.io/observatorium/token-refresher',
   version: error 'must provide version',
   namespace: error 'must provide namespace',
+
   url: error 'must provide target url',
-  oidcSecret: {
-    name: 'token-refresher-oidc',
-    keys: {
-      issuerURL: 'issuerURL',
-      clientID: 'clientID',
-      clientSecret: 'clientSecret',
-      audience: 'audience',
-    },
-  },
+  secretName: 'token-refresher-oidc',
+  issuerURLKey: 'issuerURL',
+  clientIDKey: 'clientID',
+  clientSecretKey: 'clientSecret',
+  audienceKey: 'audience',
   logLevel: 'info',
   logFormat: 'logfmt',
+
   ports: {
     web: 8080,
     internal: 8081,
@@ -97,20 +95,20 @@ function(params) {
               ],
               env: [
                 { name: 'OIDC_AUDIENCE', valueFrom: { secretKeyRef: {
-                  key: tr.config.oidcSecret.keys.audience,
-                  name: tr.config.oidcSecret.name,
+                  key: tr.config.audienceKey,
+                  name: tr.config.secretName,
                 } } },
                 { name: 'OIDC_CLIENT_ID', valueFrom: { secretKeyRef: {
-                  key: tr.config.oidcSecret.keys.clientID,
-                  name: tr.config.oidcSecret.name,
+                  key: tr.config.clientIDKey,
+                  name: tr.config.secretName,
                 } } },
                 { name: 'OIDC_CLIENT_SECRET', valueFrom: { secretKeyRef: {
-                  key: tr.config.oidcSecret.keys.clientSecret,
-                  name: tr.config.oidcSecret.name,
+                  key: tr.config.clientSecretKey,
+                  name: tr.config.secretName,
                 } } },
                 { name: 'OIDC_ISSUER_URL', valueFrom: { secretKeyRef: {
-                  key: tr.config.oidcSecret.keys.issuerURL,
-                  name: tr.config.oidcSecret.name,
+                  key: tr.config.issuerURLKey,
+                  name: tr.config.secretName,
                 } } },
               ],
               ports: [
