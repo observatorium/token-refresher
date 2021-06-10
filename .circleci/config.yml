@@ -27,6 +27,14 @@ jobs:
           apt-get update && apt-get -y install xz-utils unzip openssl
           make test --always-make
 
+  build-jsonnet:
+    docker:
+      - image: cimg/go:1.16
+    steps:
+      - checkout
+      - run: make manifests
+      - run: git diff --exit-code -- .
+
   container-push:
     machine:
       image: ubuntu-1604:201903-01
@@ -52,6 +60,7 @@ workflows:
       - build
       - lint
       - test
+      - build-jsonnet
       - container-push:
           requires:
             - build
