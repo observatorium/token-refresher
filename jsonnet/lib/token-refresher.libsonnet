@@ -28,6 +28,12 @@ local defaults = {
     'app.kubernetes.io/instance': defaults.name,
     'app.kubernetes.io/version': defaults.version,
   },
+
+  podLabelSelector:: {
+    [labelName]: defaults.commonLabels[labelName]
+    for labelName in std.objectFields(defaults.commonLabels)
+    if !std.setMember(labelName, ['app.kubernetes.io/version'])
+  },
 };
 
 function(params) {
@@ -59,7 +65,7 @@ function(params) {
         }
         for name in std.objectFields(tr.config.ports)
       ],
-      selector: tr.config.commonLabels,
+      selector: tr.config.podLabelSelector,
       type: 'ClusterIP',
     },
   },
@@ -74,7 +80,7 @@ function(params) {
     },
     spec: {
       selector: {
-        matchLabels: tr.config.commonLabels,
+        matchLabels: tr.config.podLabelSelector,
       },
       template: {
         metadata: {
@@ -131,10 +137,11 @@ function(params) {
     metadata+: {
       name: tr.config.name,
       namespace: tr.config.namespace,
+      labels: tr.config.commonLabels,
     },
     spec: {
       selector: {
-        matchLabels: tr.config.commonLabels,
+        matchLabels: tr.config.podLabelSelector,
       },
       endpoints: [
         { port: 'internal' },

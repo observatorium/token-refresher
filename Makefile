@@ -1,3 +1,5 @@
+include .bingo/Variables.mk
+
 SHELL=/usr/bin/env bash -o pipefail
 TMP_DIR := $(shell pwd)/tmp
 BIN_DIR ?= $(TMP_DIR)/bin
@@ -76,6 +78,15 @@ clean:
 	-rm tmp/help.txt
 	-rm -rf tmp/bin
 	-rm token-refresher
+
+.PHONY: manifests
+manifests: jsonnet/example/manifests
+
+jsonnet/example/manifests: jsonnet/example/main.jsonnet $(JSONNET) $(GOJSONTOYAML)
+	-rm -rf jsonnet/example/manifests
+	-mkdir jsonnet/example/manifests
+	$(JSONNET) -m jsonnet/example/manifests jsonnet/example/main.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
+	find jsonnet/example/manifests -type f ! -name '*.yaml' -delete
 
 .PHONY: container
 container: Dockerfile
