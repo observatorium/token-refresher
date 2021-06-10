@@ -7,6 +7,7 @@ local defaults = {
   image: 'quay.io/observatorium/token-refresher',
   version: error 'must provide version',
   namespace: error 'must provide namespace',
+  serviceMonitor: false,
 
   url: error 'must provide target url',
   secretName: 'token-refresher-oidc',
@@ -34,6 +35,8 @@ function(params) {
 
   // Combine the defaults and the passed params to make the component's config.
   config:: defaults + params,
+
+  assert std.isBoolean(tr.config.serviceMonitor),
 
   service: {
     apiVersion: 'v1',
@@ -119,6 +122,23 @@ function(params) {
           ],
         },
       },
+    },
+  },
+
+  serviceMonitor: if tr.config.serviceMonitor == true then {
+    apiVersion: 'monitoring.coreos.com/v1',
+    kind: 'ServiceMonitor',
+    metadata+: {
+      name: tr.config.name,
+      namespace: tr.config.namespace,
+    },
+    spec: {
+      selector: {
+        matchLabels: tr.config.commonLabels,
+      },
+      endpoints: [
+        { port: 'internal' },
+      ],
     },
   },
 }
