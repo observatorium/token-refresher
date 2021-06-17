@@ -30,6 +30,7 @@ import (
 
 const (
 	retryInterval = 5 * time.Second
+	prefixHeader  = "X-Forwarded-Prefix"
 )
 
 type config struct {
@@ -234,6 +235,9 @@ func main() {
 					request.URL.Host = cfg.url.Host
 					// Derive path from the paths of configured URL and request URL.
 					request.URL.Path, request.URL.RawPath = joinURLPath(cfg.url, request.URL)
+					// Add prefix header with value "/", since from a client's perspective
+					// we are forwarding /<anything> to /<cfg.url.Path>/<anything>.
+					request.Header.Add(prefixHeader, "/")
 				},
 			}
 			p.Transport = &oauth2.Transport{
