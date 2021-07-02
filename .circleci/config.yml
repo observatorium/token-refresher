@@ -42,7 +42,7 @@ jobs:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
-          make container-push
+          make conditional-container-push
 
   container-release:
     machine:

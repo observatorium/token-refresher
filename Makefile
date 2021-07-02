@@ -103,6 +103,10 @@ container-push: container
 	docker push $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
 	docker push $(DOCKER_REPO):latest
 
+.PHONY: conditional-container-push
+conditional-container-push:
+	build/conditional-container-push.sh $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
+
 .PHONY: container-release
 container-release: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
 container-release: container
