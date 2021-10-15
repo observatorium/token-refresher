@@ -110,7 +110,7 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.upstream.caFile, "upstream.ca-file", "", "The path to the CA file to verify upstream server TLS certificates.")
 	flag.DurationVar(&cfg.upstream.readTimeout, "upstream.read-timeout", 0, "The time from when the connection is accepted to when the request body is fully read.")
 	flag.DurationVar(&cfg.upstream.writeTimeout, "upstream.write-timeout", 0, "The time from the end of the request header read to the end of the response write .")
-	flag.DurationVar(&cfg.margin, "margin", LookupEnvOrDuration("", 5*time.Minute), "The margin of time before a token expires to try to refresh it.")
+	flag.DurationVar(&cfg.margin, "margin", LookupEnvOrDuration("MARGIN", 5*time.Minute), "The margin of time before a token expires to try to refresh it.")
 
 	flag.Parse()
 
