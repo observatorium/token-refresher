@@ -7,7 +7,7 @@ WORKDIR /opt
 
 RUN git update-index --refresh; make token-refresher
 
-FROM alpine:3.10 as runner
+FROM scratch as runner
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /opt/token-refresher /bin/token-refresher
