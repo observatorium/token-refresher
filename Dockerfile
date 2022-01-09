@@ -1,4 +1,4 @@
-FROM golang:1.14.1-alpine3.11 as builder
+FROM golang:1.17.6-alpine3.15 as builder
 
 RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-ca-certificates
 
@@ -7,7 +7,7 @@ WORKDIR /opt
 
 RUN git update-index --refresh; make token-refresher
 
-FROM scratch as runner
+FROM redhat/ubi8-micro:8.5-596 as runner
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /opt/token-refresher /bin/token-refresher
