@@ -56,6 +56,8 @@ type oidcConfig struct {
 	clientID     string
 	clientSecret string
 	issuerURL    string
+	username     string
+	password     string
 }
 
 func parseFlags() (*config, error) {
@@ -69,6 +71,8 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.oidc.clientSecret, "oidc.client-secret", "", "The OIDC client secret, see https://tools.ietf.org/html/rfc6749#section-2.3.")
 	flag.StringVar(&cfg.oidc.clientID, "oidc.client-id", "", "The OIDC client ID, see https://tools.ietf.org/html/rfc6749#section-2.3.")
 	flag.StringVar(&cfg.oidc.audience, "oidc.audience", "", "The audience for whom the access token is intended, see https://openid.net/specs/openid-connect-core-1_0.html#IDToken.")
+	flag.StringVar(&cfg.oidc.username, "oidc.username", "", "The username to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
+	flag.StringVar(&cfg.oidc.password, "oidc.password", "", "The password to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
 	flag.StringVar(&cfg.file, "file", "", "The path to the file in which to write the retrieved token.")
 	flag.StringVar(&cfg.tempFile, "temp-file", "", "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
 	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
@@ -188,6 +192,13 @@ func main() {
 		if cfg.oidc.audience != "" {
 			ccc.EndpointParams = url.Values{
 				"audience": []string{cfg.oidc.audience},
+			}
+		}
+		if cfg.oidc.username != "" && cfg.oidc.password != "" {
+			ccc.EndpointParams = url.Values{
+				"username":   []string{cfg.oidc.username},
+				"password":   []string{cfg.oidc.password},
+				"grant_type": []string{"password"},
 			}
 		}
 
