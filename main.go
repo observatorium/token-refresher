@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	stdlog "log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -33,6 +34,8 @@ import (
 const (
 	retryInterval = 5 * time.Second
 	prefixHeader  = "X-Forwarded-Prefix"
+
+	defaultTimeout = 30 * time.Second
 )
 
 type config struct {
@@ -56,6 +59,7 @@ type upstreamConfig struct {
 type serverConfig struct {
 	listen         string
 	listenInternal string
+	proxyTimeout   time.Duration
 }
 
 type oidcConfig struct {
@@ -74,6 +78,7 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.logFormat, "log.format", "logfmt", "The log format to use. Options: 'logfmt', 'json'.")
 	flag.StringVar(&cfg.server.listenInternal, "web.internal.listen", ":8081", "The address on which the internal server listens.")
 	flag.StringVar(&cfg.server.listen, "web.listen", ":8080", "The address on which the proxy server listens.")
+	flag.DurationVar(&cfg.server.proxyTimeout, "proxy.timeout", defaultTimeout, "The timeout for the proxy server.")
 	flag.StringVar(&cfg.oidc.issuerURL, "oidc.issuer-url", "", "The OIDC issuer URL, see https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery.")
 	flag.StringVar(&cfg.oidc.clientSecret, "oidc.client-secret", "", "The OIDC client secret, see https://tools.ietf.org/html/rfc6749#section-2.3.")
 	flag.StringVar(&cfg.oidc.clientID, "oidc.client-id", "", "The OIDC client ID, see https://tools.ietf.org/html/rfc6749#section-2.3.")
@@ -287,10 +292,15 @@ func main() {
 				base = t
 			}
 
+			base.(*http.Transport).DialContext = (&net.Dialer{
+				Timeout: cfg.server.proxyTimeout,
+			}).DialContext
+
 			p.Transport = &oauth2.Transport{
 				Source: ccc.TokenSource(ctx),
 				Base:   base,
 			}
+
 			s := http.Server{
 				Addr:    cfg.server.listen,
 				Handler: signalhttp.NewHandlerInstrumenter(reg, nil).NewHandler(nil, &p),
