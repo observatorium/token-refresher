@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -40,10 +42,15 @@ type config struct {
 	margin    time.Duration
 	name      string
 	tempFile  string
-	url       *url.URL
 
-	oidc   oidcConfig
-	server serverConfig
+	oidc     oidcConfig
+	server   serverConfig
+	upstream upstreamConfig
+}
+
+type upstreamConfig struct {
+	url    *url.URL
+	caFile string
 }
 
 type serverConfig struct {
@@ -75,7 +82,9 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.oidc.password, "oidc.password", "", "The password to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
 	flag.StringVar(&cfg.file, "file", "", "The path to the file in which to write the retrieved token.")
 	flag.StringVar(&cfg.tempFile, "temp-file", "", "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
-	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
+	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.(DEPRECATED: Use -upstream.url instead)")
+	rawUpstreamURL := flag.String("upstream.url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
+	flag.StringVar(&cfg.upstream.caFile, "upstream.ca-file", "", "The path to the CA file to verify upstream server TLS certificates.")
 	flag.DurationVar(&cfg.margin, "margin", 5*time.Minute, "The margin of time before a token expires to try to refresh it.")
 
 	flag.Parse()
@@ -93,16 +102,28 @@ func parseFlags() (*config, error) {
 		return nil, fmt.Errorf("unexpected log level: %s", *logLevelRaw)
 	}
 
+	if *rawURL != "" && *rawUpstreamURL != "" {
+		return nil, errors.New("use only one of --url or --upstream.url")
+	}
+
 	if *rawURL != "" {
 		u, err := url.Parse(*rawURL)
 		if err != nil {
 			return nil, err
 		}
-		cfg.url = u
+		cfg.upstream.url = u
 	}
 
-	if cfg.file == "" && cfg.url == nil {
-		return nil, errors.New("one of --file or --url is required")
+	if *rawUpstreamURL != "" {
+		u, err := url.Parse(*rawUpstreamURL)
+		if err != nil {
+			return nil, err
+		}
+		cfg.upstream.url = u
+	}
+
+	if cfg.file == "" && cfg.upstream.url == nil {
+		return nil, errors.New("one of --file or --upstream.url is required")
 	}
 
 	if cfg.tempFile == "" {
@@ -235,24 +256,40 @@ func main() {
 			})
 		}
 
-		if cfg.url != nil {
+		if cfg.upstream.url != nil {
 			ctx, cancel := context.WithCancel(ctx)
 			// Create Reverse Proxy.
 			p := httputil.ReverseProxy{
 				Director: func(request *http.Request) {
-					request.URL.Scheme = cfg.url.Scheme
+					request.URL.Scheme = cfg.upstream.url.Scheme
 					// Set the Host at both request and request.URL objects.
-					request.Host = cfg.url.Host
-					request.URL.Host = cfg.url.Host
+					request.Host = cfg.upstream.url.Host
+					request.URL.Host = cfg.upstream.url.Host
 					// Derive path from the paths of configured URL and request URL.
-					request.URL.Path, request.URL.RawPath = joinURLPath(cfg.url, request.URL)
+					request.URL.Path, request.URL.RawPath = joinURLPath(cfg.upstream.url, request.URL)
 					// Add prefix header with value "/", since from a client's perspective
-					// we are forwarding /<anything> to /<cfg.url.Path>/<anything>.
+					// we are forwarding /<anything> to /<cfg.upstream.url.Path>/<anything>.
 					request.Header.Add(prefixHeader, "/")
 				},
 			}
+
+			base := http.DefaultTransport
+			if cfg.upstream.caFile != "" {
+				caCert, err := ioutil.ReadFile(cfg.upstream.caFile)
+				if err != nil {
+					stdlog.Fatalf("failed to initialize upstream server TLS CA: %v", err)
+				}
+				pool := x509.NewCertPool()
+				pool.AppendCertsFromPEM(caCert)
+
+				t := http.DefaultTransport.(*http.Transport).Clone()
+				t.TLSClientConfig = &tls.Config{RootCAs: pool}
+				base = t
+			}
+
 			p.Transport = &oauth2.Transport{
 				Source: ccc.TokenSource(ctx),
+				Base:   base,
 			}
 			s := http.Server{
 				Addr:    cfg.server.listen,
