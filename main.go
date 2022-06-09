@@ -43,7 +43,6 @@ type config struct {
 	margin    time.Duration
 	name      string
 	tempFile  string
-	url       *url.URL
 
 	oidc     oidcConfig
 	server   serverConfig
