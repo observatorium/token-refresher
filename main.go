@@ -113,7 +113,6 @@ func parseFlags() (*config, error) {
 		if err != nil {
 			return nil, err
 		}
-		cfg.url = u
 		cfg.upstream.url = u
 	}
 
