@@ -124,7 +124,7 @@ func parseFlags() (*config, error) {
 		cfg.upstream.url = u
 	}
 
-	if cfg.file == "" && cfg.url == nil && cfg.upstream.url == nil {
+	if cfg.file == "" && cfg.upstream.url == nil {
 		return nil, errors.New("one of --file or --upstream.url is required")
 	}
 
