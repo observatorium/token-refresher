@@ -126,7 +126,7 @@ container-release-push: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --p
 container-release-push: container-nightly-push
 	# https://git-scm.com/docs/git-tag#Documentation/git-tag.txt---points-atltobjectgt
 	@docker buildx build \
-		--output type=oci,dest=oci.tar \
+		--push \
 		--platform linux/amd64,linux/arm64 \
 		--cache-from type=local,src=./.buildxcache/ \
 	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
