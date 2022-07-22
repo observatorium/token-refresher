@@ -103,7 +103,7 @@ container-dev:
 
 .PHONY: container-nightly-push
 container-nightly-push:
-	# git update-index --refresh
+	git update-index --refresh
 	@docker buildx build \
 		--push \
 		--platform linux/amd64,linux/arm64 \
