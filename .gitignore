@@ -11,6 +11,13 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# macOS junk
+.DS_Store
+
+# VSCode stuff
+.vscode/
+
+# Project specific
 token-refresher
 token
 tmp/
