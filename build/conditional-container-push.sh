@@ -99,4 +99,4 @@ if image_exists_in_repo "$IMAGE_URI"; then
     exit 0
 fi
 
-make container-push
+make container-nightly-push

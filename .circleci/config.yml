@@ -35,23 +35,23 @@ jobs:
       - run: make manifests
       - run: git diff --exit-code -- .
 
-  container-push:
+  container-nightly-push:
     machine:
-      image: ubuntu-1604:201903-01
+      image: ubuntu-2004:current
     steps:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
-          make conditional-container-push
+          make conditional-container-nightly-push
 
-  container-release:
+  container-release-push:
     machine:
-      image: ubuntu-1604:201903-01
+      image: ubuntu-2004:current
     steps:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
-          make container-release
+          make container-release-push
 
 workflows:
   version: 2
@@ -61,7 +61,7 @@ workflows:
       - lint
       - test
       - build-jsonnet
-      - container-push:
+      - container-nightly-push:
           requires:
             - build
           filters:
@@ -70,7 +70,7 @@ workflows:
                 - master
   tagged-master:
     jobs:
-      - container-release:
+      - container-release-push:
           filters:
             tags:
               # Suggested SemVer regex:
