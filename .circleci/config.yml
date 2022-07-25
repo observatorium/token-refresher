@@ -44,14 +44,14 @@ jobs:
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
           make conditional-container-build-push
 
-  container-release-push:
+  container-release-build-push:
     machine:
       image: ubuntu-2004:current
     steps:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
-          make container-release-push
+          make container-release-build-push
 
 workflows:
   version: 2
@@ -70,7 +70,7 @@ workflows:
                 - master
   tagged-master:
     jobs:
-      - container-release-push:
+      - container-release-build-push:
           filters:
             tags:
               # Suggested SemVer regex:

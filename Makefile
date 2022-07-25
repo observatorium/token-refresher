@@ -121,9 +121,9 @@ container-build-push:
 conditional-container-build-push:
 	build/conditional-container-push.sh $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
 
-.PHONY: container-release-push
-container-release-push: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
-container-release-push: container-nightly-push
+.PHONY: container-release-build-push
+container-release-build-push: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
+container-release-build-push: container-build-push
 	# https://git-scm.com/docs/git-tag#Documentation/git-tag.txt---points-atltobjectgt
 	@docker buildx build \
 		--push \
