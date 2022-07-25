@@ -101,8 +101,8 @@ container-dev:
 		.
 	docker tag $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) $(DOCKER_REPO):latest
 
-.PHONY: container-nightly-push
-container-nightly-push:
+.PHONY: container-build-push
+container-build-push:
 	git update-index --refresh
 	@docker buildx build \
 		--push \
@@ -117,8 +117,8 @@ container-nightly-push:
 		-t $(DOCKER_REPO):latest \
 		.
 
-.PHONY: conditional-container-nightly-push
-conditional-container-nightly-push:
+.PHONY: conditional-container-build-push
+conditional-container-build-push:
 	build/conditional-container-push.sh $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
 
 .PHONY: container-release-push

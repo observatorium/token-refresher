@@ -35,14 +35,14 @@ jobs:
       - run: make manifests
       - run: git diff --exit-code -- .
 
-  container-nightly-push:
+  container-build-push:
     machine:
       image: ubuntu-2004:current
     steps:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
-          make conditional-container-nightly-push
+          make conditional-container-build-push
 
   container-release-push:
     machine:
@@ -61,7 +61,7 @@ workflows:
       - lint
       - test
       - build-jsonnet
-      - container-nightly-push:
+      - container-build-push:
           requires:
             - build
           filters:
