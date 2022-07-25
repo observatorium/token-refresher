@@ -7,6 +7,7 @@ LIB_DIR ?= $(TMP_DIR)/lib
 FIRST_GOPATH := $(firstword $(subst :, ,$(shell go env GOPATH)))
 OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
 ARCH ?= $(shell uname -m)
+GOARCH ?= $(shell go env GOARCH)
 
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
 BUILD_DATE := $(shell date -u +"%Y-%m-%d")
@@ -36,7 +37,7 @@ README.md: $(EMBEDMD) tmp/help.txt
 	$(EMBEDMD) -w README.md
 
 token-refresher: vendor main.go $(wildcard *.go) $(wildcard */*.go)
-	CGO_ENABLED=0 GOOS=$(OS) GOARCH=amd64 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
+	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
 
 .PHONY: build
 build: token-refresher
@@ -88,32 +89,54 @@ jsonnet/example/manifests: jsonnet/example/main.jsonnet $(JSONNET) $(GOJSONTOYAM
 	$(JSONNET) -m jsonnet/example/manifests jsonnet/example/main.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
 	find jsonnet/example/manifests -type f ! -name '*.yaml' -delete
 
-.PHONY: container
-container: Dockerfile
-	@docker build --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+.PHONY: container-dev
+container-dev:
+	@docker build \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg VCS_REF="$(VCS_REF)" \
 		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
 		--build-arg DOCKERFILE_PATH="/Dockerfile" \
-		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) .
-	@docker tag $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) $(DOCKER_REPO):latest
+		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		.
+	docker tag $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) $(DOCKER_REPO):latest
 
-.PHONY: container-push
-container-push: container
-	docker push $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
-	docker push $(DOCKER_REPO):latest
+.PHONY: container-build-push
+container-build-push:
+	git update-index --refresh
+	@docker buildx build \
+		--push \
+		--platform linux/amd64,linux/arm64 \
+		--cache-to type=local,dest=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(DOCKER_REPO):latest \
+		.
 
-.PHONY: conditional-container-push
-conditional-container-push:
+.PHONY: conditional-container-build-push
+conditional-container-build-push:
 	build/conditional-container-push.sh $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
 
-.PHONY: container-release
-container-release: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
-container-release: container
+.PHONY: container-release-build-push
+container-release-build-push: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
+container-release-build-push: container-build-push
 	# https://git-scm.com/docs/git-tag#Documentation/git-tag.txt---points-atltobjectgt
-	@docker tag $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) $(DOCKER_REPO):$(VERSION_TAG)
-	docker push $(DOCKER_REPO):$(VERSION_TAG)
-	docker push $(DOCKER_REPO):latest
+	@docker buildx build \
+		--push \
+		--platform linux/amd64,linux/arm64 \
+		--cache-from type=local,src=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VERSION_TAG) \
+		-t $(DOCKER_REPO):latest \
+		.
 
 .PHONY: integration-test-dependencies
 integration-test-dependencies: $(THANOS) $(UP) $(HYDRA) $(OBSERVATORIUM)

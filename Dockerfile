@@ -1,11 +1,15 @@
-FROM golang:1.14.1-alpine3.11 as builder
+FROM --platform=$BUILDPLATFORM golang:1.14.1-alpine3.11 as builder
 
 RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-ca-certificates
 
 ADD . /opt
 WORKDIR /opt
+# Run this before `make token-refresher` to be friendy with Docker image layer cache.
+RUN make vendor
 
-RUN git update-index --refresh; make token-refresher
+ARG TARGETOS TARGETARCH
+
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} make token-refresher
 
 FROM scratch as runner
 
