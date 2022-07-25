@@ -42,6 +42,7 @@ jobs:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
+          docker buildx create --use
           make conditional-container-build-push
 
   container-release-build-push:
@@ -51,6 +52,7 @@ jobs:
       - checkout
       - run: |
           echo "$DOCKER_PASS" | docker login quay.io --username $DOCKER_USER --password-stdin
+          docker buildx create --use
           make container-release-build-push
 
 workflows:
