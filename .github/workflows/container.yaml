@@ -55,6 +55,7 @@ jobs:
 
       - name: Check semver tag
         id: check-semver-tag
+        # The regex below comes from https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string.
         run: |
           if [[ ${{ github.event.ref }} =~ ^refs/tags/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$ ]]; then
               echo ::set-output name=match::true
