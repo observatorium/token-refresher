@@ -101,6 +101,21 @@ container-dev:
 		.
 	docker tag $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) $(DOCKER_REPO):latest
 
+.PHONY: container-build
+container-build:
+	git update-index --refresh
+	@docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--cache-to type=local,dest=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(DOCKER_REPO):latest \
+		.
+
 .PHONY: container-build-push
 container-build-push:
 	git update-index --refresh

@@ -29,6 +29,25 @@ jobs:
       - name: Run source code linting.
         run: make lint
 
+  go_multiarch_build:
+    runs-on: ubuntu-latest
+    name: Build for all supported archs.
+    steps:
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Cache for Docker's buildx
+        uses: actions/cache@v3
+        with:
+          path: .buildxcache/
+          key: ${{ runner.os }}-buildx-${{ hashFiles('**/*.go', 'Dockerfile', 'go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Snapshot container buid & push
+        run: make conditional-container-build-push
+
   go_build_and_test:
     runs-on: ubuntu-latest
     name: Build the Go Binary and run tests.
