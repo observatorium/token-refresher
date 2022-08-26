@@ -3,9 +3,8 @@ name: Go code jobs
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
-    branches: [master]
 
 jobs:
   source_lint:
