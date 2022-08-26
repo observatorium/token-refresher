@@ -53,7 +53,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Snapshot container buid & push
+      - name: Snapshot container buid
         run: make container-build
 
   go_build_and_test:
