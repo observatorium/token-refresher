@@ -29,7 +29,9 @@ spec:
         - --oidc.client-id=$(OIDC_CLIENT_ID)
         - --oidc.client-secret=$(OIDC_CLIENT_SECRET)
         - --oidc.issuer-url=$(OIDC_ISSUER_URL)
-        - --url=http://observatorium-observatorium-api.observatorium.svc:8080
+        - --upstream.url=http://observatorium-observatorium-api.observatorium.svc:8080
+        - --upstream.read-timeout=5s
+        - --upstream.write-timeout=10s
         env:
         - name: OIDC_AUDIENCE
           valueFrom:

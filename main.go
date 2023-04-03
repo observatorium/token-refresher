@@ -49,8 +49,10 @@ type config struct {
 }
 
 type upstreamConfig struct {
-	url    *url.URL
-	caFile string
+	url          *url.URL
+	caFile       string
+	readTimeout  time.Duration
+	writeTimeout time.Duration
 }
 
 type serverConfig struct {
@@ -85,6 +87,8 @@ func parseFlags() (*config, error) {
 	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.(DEPRECATED: Use -upstream.url instead)")
 	rawUpstreamURL := flag.String("upstream.url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
 	flag.StringVar(&cfg.upstream.caFile, "upstream.ca-file", "", "The path to the CA file to verify upstream server TLS certificates.")
+	flag.DurationVar(&cfg.upstream.readTimeout, "upstream.read-timout", 5*time.Second, "The time from when the connection is accepted to when the request body is fully read.")
+	flag.DurationVar(&cfg.upstream.writeTimeout, "upstream.write-timout", 10*time.Second, "The time from the end of the request header read to the end of the response write .")
 	flag.DurationVar(&cfg.margin, "margin", 5*time.Minute, "The margin of time before a token expires to try to refresh it.")
 
 	flag.Parse()
@@ -292,8 +296,10 @@ func main() {
 				Base:   base,
 			}
 			s := http.Server{
-				Addr:    cfg.server.listen,
-				Handler: signalhttp.NewHandlerInstrumenter(reg, nil).NewHandler(nil, &p),
+				Addr:         cfg.server.listen,
+				Handler:      signalhttp.NewHandlerInstrumenter(reg, nil).NewHandler(nil, &p),
+				ReadTimeout:  cfg.upstream.readTimeout,
+				WriteTimeout: cfg.upstream.writeTimeout,
 			}
 			g.Add(func() error {
 				level.Info(logger).Log("msg", "starting proxy server", "address", s.Addr)

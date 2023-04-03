@@ -17,6 +17,8 @@ local defaults = {
   audienceKey: 'audience',
   logLevel: 'info',
   logFormat: 'logfmt',
+  readTimeout: '5s',
+  writeTimeout: '10s',
 
   ports: {
     web: 8080,
@@ -100,7 +102,9 @@ function(params) {
                 '--oidc.client-id=$(OIDC_CLIENT_ID)',
                 '--oidc.client-secret=$(OIDC_CLIENT_SECRET)',
                 '--oidc.issuer-url=$(OIDC_ISSUER_URL)',
-                '--url=' + tr.config.url,
+                '--upstream.url=' + tr.config.url,
+                '--upstream.read-timeout=' + tr.config.readTimeout,
+                '--upstream.write-timeout=' + tr.config.writeTimeout,
               ],
               env: [
                 { name: 'OIDC_AUDIENCE', valueFrom: { secretKeyRef: {
