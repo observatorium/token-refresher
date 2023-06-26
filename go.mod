@@ -1,6 +1,6 @@
 module github.com/observatorium/token-refresher
 
-go 1.14
+go 1.19
 
 require (
 	github.com/campoy/embedmd v1.0.0
