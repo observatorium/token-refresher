@@ -8,7 +8,6 @@ FIRST_GOPATH := $(firstword $(subst :, ,$(shell go env GOPATH)))
 OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
 ARCH ?= $(shell uname -m)
 GOARCH ?= $(shell go env GOARCH)
-GOFLAGS := -tags=fips_enabled
 GOEXPERIMENT := boringcrypto
 
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
