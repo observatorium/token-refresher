@@ -8,7 +8,6 @@ FIRST_GOPATH := $(firstword $(subst :, ,$(shell go env GOPATH)))
 OS ?= $(shell uname -s | tr '[A-Z]' '[a-z]')
 ARCH ?= $(shell uname -m)
 GOARCH ?= $(shell go env GOARCH)
-GOEXPERIMENT := boringcrypto
 
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
 BUILD_DATE := $(shell date -u +"%Y-%m-%d")
@@ -38,7 +37,7 @@ README.md: $(EMBEDMD) tmp/help.txt
 	$(EMBEDMD) -w README.md
 
 token-refresher: vendor main.go $(wildcard *.go) $(wildcard */*.go)
-	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
+	CGO_ENABLED=0 GOEXPERIMENT=boringcrypto GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
 
 .PHONY: build
 build: token-refresher
