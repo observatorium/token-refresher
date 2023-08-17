@@ -1,6 +1,6 @@
-FROM --platform=$BUILDPLATFORM golang:1.19-alpine3.16 as builder
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest as builder
 
-RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-ca-certificates
+RUN microdnf install go-toolset make
 
 ADD . /opt
 WORKDIR /opt
@@ -11,9 +11,8 @@ ARG TARGETOS TARGETARCH
 
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} make token-refresher
 
-FROM scratch as runner
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /opt/token-refresher /bin/token-refresher
 
 ARG BUILD_DATE
