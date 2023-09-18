@@ -83,7 +83,7 @@ func parseFlags() (*config, error) {
 	flag.StringVar(&cfg.oidc.audience, "oidc.audience", "", "The audience for whom the access token is intended, see https://openid.net/specs/openid-connect-core-1_0.html#IDToken.")
 	flag.StringVar(&cfg.oidc.username, "oidc.username", "", "The username to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
 	flag.StringVar(&cfg.oidc.password, "oidc.password", "", "The password to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
-	flag.StringSliceVar(&cfg.scope, "scope", []string{""}, "The scope to be included in the payload data of the token.  Scopes can either be comma-separated or space-separated.")
+	flag.StringSliceVar(&cfg.scope, "scope", []string{""}, "The scope to be included in the payload data of the token. Scopes can either be comma-separated or space-separated.")
 	flag.StringVar(&cfg.file, "file", "", "The path to the file in which to write the retrieved token.")
 	flag.StringVar(&cfg.tempFile, "temp-file", "", "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
 	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.(DEPRECATED: Use -upstream.url instead)")
