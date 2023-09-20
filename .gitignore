@@ -17,6 +17,9 @@
 # VSCode stuff
 .vscode/
 
+#JetBrains stuff
+.idea/
+
 # Project specific
 token-refresher
 token
