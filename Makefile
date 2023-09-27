@@ -37,7 +37,7 @@ README.md: $(EMBEDMD) tmp/help.txt
 	$(EMBEDMD) -w README.md
 
 token-refresher: vendor main.go $(wildcard *.go) $(wildcard */*.go)
-	CGO_ENABLED=0 GOEXPERIMENT=boringcrypto GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
+	CGO_ENABLED=1 GOEXPERIMENT=boringcrypto GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -a -ldflags '-s -w' -o $@ .
 
 .PHONY: build
 build: token-refresher
