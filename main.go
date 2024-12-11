@@ -70,28 +70,47 @@ type oidcConfig struct {
 	password     string
 }
 
+func lookupEnvOrString(key string, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return defaultVal
+}
+
+func lookupEnvOrDuration(key string, defaultVal time.Duration) time.Duration {
+	if val, ok := os.LookupEnv(key); ok {
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			fmt.Sprintln("error trying to parse duration, using default value: ", err)
+			return defaultVal
+		}
+		return d
+	}
+	return defaultVal
+}
+
 func parseFlags() (*config, error) {
 	cfg := &config{}
 	flag.StringVar(&cfg.name, "debug.name", "token-refresher", "A name to add as a prefix to log lines.")
-	logLevelRaw := flag.String("log.level", "info", "The log filtering level. Options: 'error', 'warn', 'info', 'debug'.")
-	flag.StringVar(&cfg.logFormat, "log.format", "logfmt", "The log format to use. Options: 'logfmt', 'json'.")
-	flag.StringVar(&cfg.server.listenInternal, "web.internal.listen", ":8081", "The address on which the internal server listens.")
-	flag.StringVar(&cfg.server.listen, "web.listen", ":8080", "The address on which the proxy server listens.")
-	flag.StringVar(&cfg.oidc.issuerURL, "oidc.issuer-url", "", "The OIDC issuer URL, see https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery.")
-	flag.StringVar(&cfg.oidc.clientSecret, "oidc.client-secret", "", "The OIDC client secret, see https://tools.ietf.org/html/rfc6749#section-2.3.")
-	flag.StringVar(&cfg.oidc.clientID, "oidc.client-id", "", "The OIDC client ID, see https://tools.ietf.org/html/rfc6749#section-2.3.")
-	flag.StringVar(&cfg.oidc.audience, "oidc.audience", "", "The audience for whom the access token is intended, see https://openid.net/specs/openid-connect-core-1_0.html#IDToken.")
-	flag.StringVar(&cfg.oidc.username, "oidc.username", "", "The username to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
-	flag.StringVar(&cfg.oidc.password, "oidc.password", "", "The password to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
+	logLevelRaw := flag.String("log.level", lookupEnvOrString("LOG_LEVEL", "info"), "The log filtering level. Options: 'error', 'warn', 'info', 'debug'.")
+	flag.StringVar(&cfg.logFormat, "log.format", lookupEnvOrString("LOG_FORMAT", "logfmt"), "The log format to use. Options: 'logfmt', 'json'.")
+	flag.StringVar(&cfg.server.listenInternal, "web.internal.listen", lookupEnvOrString("WEB_INTERNAL_LISTEN", ":8081"), "The address on which the internal server listens.")
+	flag.StringVar(&cfg.server.listen, "web.listen", lookupEnvOrString("WEB_LISTEN", ":8080"), "The address on which the proxy server listens.")
+	flag.StringVar(&cfg.oidc.issuerURL, "oidc.issuer-url", lookupEnvOrString("OIDC_ISSUER_URL", ""), "The OIDC issuer URL, see https://openid.net/specs/openid-connect-discovery-1_0.html#IssuerDiscovery.")
+	flag.StringVar(&cfg.oidc.clientSecret, "oidc.client-secret", lookupEnvOrString("OIDC_CLIENT_SECRET", ""), "The OIDC client secret, see https://tools.ietf.org/html/rfc6749#section-2.3.")
+	flag.StringVar(&cfg.oidc.clientID, "oidc.client-id", lookupEnvOrString("OIDC_CLIENT_ID", ""), "The OIDC client ID, see https://tools.ietf.org/html/rfc6749#section-2.3.")
+	flag.StringVar(&cfg.oidc.audience, "oidc.audience", lookupEnvOrString("OIDC_AUDIENCE", ""), "The audience for whom the access token is intended, see https://openid.net/specs/openid-connect-core-1_0.html#IDToken.")
+	flag.StringVar(&cfg.oidc.username, "oidc.username", lookupEnvOrString("OIDC_USERNAME", ""), "The username to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
+	flag.StringVar(&cfg.oidc.password, "oidc.password", lookupEnvOrString("OIDC_PASSWORD", ""), "The password to use for OIDC authentication. If both username and password are set then grant_type is set to password.")
 	flag.StringSliceVar(&cfg.scope, "scope", []string{}, "The scope to be included in the payload data of the token. Scopes can either be comma-separated or space-separated.")
-	flag.StringVar(&cfg.file, "file", "", "The path to the file in which to write the retrieved token.")
-	flag.StringVar(&cfg.tempFile, "temp-file", "", "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
-	rawURL := flag.String("url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.(DEPRECATED: Use -upstream.url instead)")
-	rawUpstreamURL := flag.String("upstream.url", "", "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
-	flag.StringVar(&cfg.upstream.caFile, "upstream.ca-file", "", "The path to the CA file to verify upstream server TLS certificates.")
-	flag.DurationVar(&cfg.upstream.readTimeout, "upstream.read-timeout", 0, "The time from when the connection is accepted to when the request body is fully read.")
-	flag.DurationVar(&cfg.upstream.writeTimeout, "upstream.write-timeout", 0, "The time from the end of the request header read to the end of the response write .")
-	flag.DurationVar(&cfg.margin, "margin", 5*time.Minute, "The margin of time before a token expires to try to refresh it.")
+	flag.StringVar(&cfg.file, "file", lookupEnvOrString("FILE", ""), "The path to the file in which to write the retrieved token.")
+	flag.StringVar(&cfg.tempFile, "temp-file", lookupEnvOrString("TEMP_FILE", ""), "The path to a temporary file to use for atomically update the token file. If left empty, \".tmp\" will be suffixed to the token file.")
+	rawURL := flag.String("url", lookupEnvOrString("URL", ""), "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header. (DEPRECATED: Use -upstream.url instead)")
+	rawUpstreamURL := flag.String("upstream.url", lookupEnvOrString("UPSTREAM_URL", ""), "The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header.")
+	flag.StringVar(&cfg.upstream.caFile, "upstream.ca-file", lookupEnvOrString("UPSTREAM_CA_FILE", ""), "The path to the CA file to verify upstream server TLS certificates.")
+	flag.DurationVar(&cfg.upstream.readTimeout, "upstream.read-timeout", lookupEnvOrDuration("UPSTREAM_READ_TIMEOUT", 0), "The time from when the connection is accepted to when the request body is fully read.")
+	flag.DurationVar(&cfg.upstream.writeTimeout, "upstream.write-timeout", lookupEnvOrDuration("UPSTREAM_WRITE_TIMEOUT", 0), "The time from the end of the request header read to the end of the response write .")
+	flag.DurationVar(&cfg.margin, "margin", lookupEnvOrDuration("MARGIN", 5*time.Minute), "The margin of time before a token expires to try to refresh it.")
 
 	flag.Parse()
 
