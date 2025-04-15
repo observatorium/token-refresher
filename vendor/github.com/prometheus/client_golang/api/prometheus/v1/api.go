@@ -35,11 +35,15 @@ import (
 )
 
 func init() {
-	json.RegisterTypeEncoderFunc("model.SamplePair", marshalPointJSON, marshalPointJSONIsEmpty)
-	json.RegisterTypeDecoderFunc("model.SamplePair", unMarshalPointJSON)
+	json.RegisterTypeEncoderFunc("model.SamplePair", marshalSamplePairJSON, marshalJSONIsEmpty)
+	json.RegisterTypeDecoderFunc("model.SamplePair", unmarshalSamplePairJSON)
+	json.RegisterTypeEncoderFunc("model.SampleHistogramPair", marshalSampleHistogramPairJSON, marshalJSONIsEmpty)
+	json.RegisterTypeDecoderFunc("model.SampleHistogramPair", unmarshalSampleHistogramPairJSON)
+	json.RegisterTypeEncoderFunc("model.SampleStream", marshalSampleStreamJSON, marshalJSONIsEmpty) // Only needed for benchmark.
+	json.RegisterTypeDecoderFunc("model.SampleStream", unmarshalSampleStreamJSON)                   // Only needed for benchmark.
 }
 
-func unMarshalPointJSON(ptr unsafe.Pointer, iter *json.Iterator) {
+func unmarshalSamplePairJSON(ptr unsafe.Pointer, iter *json.Iterator) {
 	p := (*model.SamplePair)(ptr)
 	if !iter.ReadArray() {
 		iter.ReportError("unmarshal model.SamplePair", "SamplePair must be [timestamp, value]")
@@ -68,12 +72,165 @@ func unMarshalPointJSON(ptr unsafe.Pointer, iter *json.Iterator) {
 	}
 }
 
-func marshalPointJSON(ptr unsafe.Pointer, stream *json.Stream) {
+func marshalSamplePairJSON(ptr unsafe.Pointer, stream *json.Stream) {
 	p := *((*model.SamplePair)(ptr))
 	stream.WriteArrayStart()
+	marshalTimestamp(p.Timestamp, stream)
+	stream.WriteMore()
+	marshalFloat(float64(p.Value), stream)
+	stream.WriteArrayEnd()
+}
+
+func unmarshalSampleHistogramPairJSON(ptr unsafe.Pointer, iter *json.Iterator) {
+	p := (*model.SampleHistogramPair)(ptr)
+	if !iter.ReadArray() {
+		iter.ReportError("unmarshal model.SampleHistogramPair", "SampleHistogramPair must be [timestamp, {histogram}]")
+		return
+	}
+	t := iter.ReadNumber()
+	if err := p.Timestamp.UnmarshalJSON([]byte(t)); err != nil {
+		iter.ReportError("unmarshal model.SampleHistogramPair", err.Error())
+		return
+	}
+	if !iter.ReadArray() {
+		iter.ReportError("unmarshal model.SampleHistogramPair", "SamplePair missing histogram")
+		return
+	}
+	h := &model.SampleHistogram{}
+	p.Histogram = h
+	for key := iter.ReadObject(); key != ""; key = iter.ReadObject() {
+		switch key {
+		case "count":
+			f, err := strconv.ParseFloat(iter.ReadString(), 64)
+			if err != nil {
+				iter.ReportError("unmarshal model.SampleHistogramPair", "count of histogram is not a float")
+				return
+			}
+			h.Count = model.FloatString(f)
+		case "sum":
+			f, err := strconv.ParseFloat(iter.ReadString(), 64)
+			if err != nil {
+				iter.ReportError("unmarshal model.SampleHistogramPair", "sum of histogram is not a float")
+				return
+			}
+			h.Sum = model.FloatString(f)
+		case "buckets":
+			for iter.ReadArray() {
+				b, err := unmarshalHistogramBucket(iter)
+				if err != nil {
+					iter.ReportError("unmarshal model.HistogramBucket", err.Error())
+					return
+				}
+				h.Buckets = append(h.Buckets, b)
+			}
+		default:
+			iter.ReportError("unmarshal model.SampleHistogramPair", fmt.Sprint("unexpected key in histogram:", key))
+			return
+		}
+	}
+	if iter.ReadArray() {
+		iter.ReportError("unmarshal model.SampleHistogramPair", "SampleHistogramPair has too many values, must be [timestamp, {histogram}]")
+		return
+	}
+}
+
+func marshalSampleHistogramPairJSON(ptr unsafe.Pointer, stream *json.Stream) {
+	p := *((*model.SampleHistogramPair)(ptr))
+	stream.WriteArrayStart()
+	marshalTimestamp(p.Timestamp, stream)
+	stream.WriteMore()
+	marshalHistogram(*p.Histogram, stream)
+	stream.WriteArrayEnd()
+}
+
+func unmarshalSampleStreamJSON(ptr unsafe.Pointer, iter *json.Iterator) {
+	ss := (*model.SampleStream)(ptr)
+	for key := iter.ReadObject(); key != ""; key = iter.ReadObject() {
+		switch key {
+		case "metric":
+			metricString := iter.ReadAny().ToString()
+			if err := json.UnmarshalFromString(metricString, &ss.Metric); err != nil {
+				iter.ReportError("unmarshal model.SampleStream", err.Error())
+				return
+			}
+		case "values":
+			for iter.ReadArray() {
+				v := model.SamplePair{}
+				unmarshalSamplePairJSON(unsafe.Pointer(&v), iter)
+				ss.Values = append(ss.Values, v)
+			}
+		case "histograms":
+			for iter.ReadArray() {
+				h := model.SampleHistogramPair{}
+				unmarshalSampleHistogramPairJSON(unsafe.Pointer(&h), iter)
+				ss.Histograms = append(ss.Histograms, h)
+			}
+		default:
+			iter.ReportError("unmarshal model.SampleStream", fmt.Sprint("unexpected key:", key))
+			return
+		}
+	}
+}
+
+func marshalSampleStreamJSON(ptr unsafe.Pointer, stream *json.Stream) {
+	ss := *((*model.SampleStream)(ptr))
+	stream.WriteObjectStart()
+	stream.WriteObjectField(`metric`)
+	m, err := json.ConfigCompatibleWithStandardLibrary.Marshal(ss.Metric)
+	if err != nil {
+		stream.Error = err
+		return
+	}
+	stream.SetBuffer(append(stream.Buffer(), m...))
+	if len(ss.Values) > 0 {
+		stream.WriteMore()
+		stream.WriteObjectField(`values`)
+		stream.WriteArrayStart()
+		for i, v := range ss.Values {
+			if i > 0 {
+				stream.WriteMore()
+			}
+			marshalSamplePairJSON(unsafe.Pointer(&v), stream)
+		}
+		stream.WriteArrayEnd()
+	}
+	if len(ss.Histograms) > 0 {
+		stream.WriteMore()
+		stream.WriteObjectField(`histograms`)
+		stream.WriteArrayStart()
+		for i, h := range ss.Histograms {
+			if i > 0 {
+				stream.WriteMore()
+			}
+			marshalSampleHistogramPairJSON(unsafe.Pointer(&h), stream)
+		}
+		stream.WriteArrayEnd()
+	}
+	stream.WriteObjectEnd()
+}
+
+func marshalFloat(v float64, stream *json.Stream) {
+	stream.WriteRaw(`"`)
+	// Taken from https://github.com/json-iterator/go/blob/master/stream_float.go#L71 as a workaround
+	// to https://github.com/json-iterator/go/issues/365 (json-iterator, to follow json standard, doesn't allow inf/nan).
+	buf := stream.Buffer()
+	abs := math.Abs(v)
+	fmt := byte('f')
+	// Note: Must use float32 comparisons for underlying float32 value to get precise cutoffs right.
+	if abs != 0 {
+		if abs < 1e-6 || abs >= 1e21 {
+			fmt = 'e'
+		}
+	}
+	buf = strconv.AppendFloat(buf, v, fmt, -1, 64)
+	stream.SetBuffer(buf)
+	stream.WriteRaw(`"`)
+}
+
+func marshalTimestamp(timestamp model.Time, stream *json.Stream) {
+	t := int64(timestamp)
 	// Write out the timestamp as a float divided by 1000.
 	// This is ~3x faster than converting to a float.
-	t := int64(p.Timestamp)
 	if t < 0 {
 		stream.WriteRaw(`-`)
 		t = -t
@@ -90,41 +247,124 @@ func marshalPointJSON(ptr unsafe.Pointer, stream *json.Stream) {
 		}
 		stream.WriteInt64(fraction)
 	}
-	stream.WriteMore()
-	stream.WriteRaw(`"`)
-
-	// Taken from https://github.com/json-iterator/go/blob/master/stream_float.go#L71 as a workaround
-	// to https://github.com/json-iterator/go/issues/365 (jsoniter, to follow json standard, doesn't allow inf/nan)
-	buf := stream.Buffer()
-	abs := math.Abs(float64(p.Value))
-	fmt := byte('f')
-	// Note: Must use float32 comparisons for underlying float32 value to get precise cutoffs right.
-	if abs != 0 {
-		if abs < 1e-6 || abs >= 1e21 {
-			fmt = 'e'
-		}
-	}
-	buf = strconv.AppendFloat(buf, float64(p.Value), fmt, -1, 64)
-	stream.SetBuffer(buf)
-
-	stream.WriteRaw(`"`)
-	stream.WriteArrayEnd()
-
 }
 
-func marshalPointJSONIsEmpty(ptr unsafe.Pointer) bool {
+func unmarshalHistogramBucket(iter *json.Iterator) (*model.HistogramBucket, error) {
+	b := model.HistogramBucket{}
+	if !iter.ReadArray() {
+		return nil, errors.New("HistogramBucket must be [boundaries, lower, upper, count]")
+	}
+	boundaries, err := iter.ReadNumber().Int64()
+	if err != nil {
+		return nil, err
+	}
+	b.Boundaries = int32(boundaries)
+	if !iter.ReadArray() {
+		return nil, errors.New("HistogramBucket must be [boundaries, lower, upper, count]")
+	}
+	f, err := strconv.ParseFloat(iter.ReadString(), 64)
+	if err != nil {
+		return nil, err
+	}
+	b.Lower = model.FloatString(f)
+	if !iter.ReadArray() {
+		return nil, errors.New("HistogramBucket must be [boundaries, lower, upper, count]")
+	}
+	f, err = strconv.ParseFloat(iter.ReadString(), 64)
+	if err != nil {
+		return nil, err
+	}
+	b.Upper = model.FloatString(f)
+	if !iter.ReadArray() {
+		return nil, errors.New("HistogramBucket must be [boundaries, lower, upper, count]")
+	}
+	f, err = strconv.ParseFloat(iter.ReadString(), 64)
+	if err != nil {
+		return nil, err
+	}
+	b.Count = model.FloatString(f)
+	if iter.ReadArray() {
+		return nil, errors.New("HistogramBucket has too many values, must be [boundaries, lower, upper, count]")
+	}
+	return &b, nil
+}
+
+// marshalHistogramBucket writes something like: [ 3, "-0.25", "0.25", "3"]
+// See marshalHistogram to understand what the numbers mean
+func marshalHistogramBucket(b model.HistogramBucket, stream *json.Stream) {
+	stream.WriteArrayStart()
+	stream.WriteInt32(b.Boundaries)
+	stream.WriteMore()
+	marshalFloat(float64(b.Lower), stream)
+	stream.WriteMore()
+	marshalFloat(float64(b.Upper), stream)
+	stream.WriteMore()
+	marshalFloat(float64(b.Count), stream)
+	stream.WriteArrayEnd()
+}
+
+// marshalHistogram writes something like:
+//
+//	{
+//	    "count": "42",
+//	    "sum": "34593.34",
+//	    "buckets": [
+//	      [ 3, "-0.25", "0.25", "3"],
+//	      [ 0, "0.25", "0.5", "12"],
+//	      [ 0, "0.5", "1", "21"],
+//	      [ 0, "2", "4", "6"]
+//	    ]
+//	}
+//
+// The 1st element in each bucket array determines if the boundaries are
+// inclusive (AKA closed) or exclusive (AKA open):
+//
+//	0: lower exclusive, upper inclusive
+//	1: lower inclusive, upper exclusive
+//	2: both exclusive
+//	3: both inclusive
+//
+// The 2nd and 3rd elements are the lower and upper boundary. The 4th element is
+// the bucket count.
+func marshalHistogram(h model.SampleHistogram, stream *json.Stream) {
+	stream.WriteObjectStart()
+	stream.WriteObjectField(`count`)
+	marshalFloat(float64(h.Count), stream)
+	stream.WriteMore()
+	stream.WriteObjectField(`sum`)
+	marshalFloat(float64(h.Sum), stream)
+
+	bucketFound := false
+	for _, bucket := range h.Buckets {
+		if bucket.Count == 0 {
+			continue // No need to expose empty buckets in JSON.
+		}
+		stream.WriteMore()
+		if !bucketFound {
+			stream.WriteObjectField(`buckets`)
+			stream.WriteArrayStart()
+		}
+		bucketFound = true
+		marshalHistogramBucket(*bucket, stream)
+	}
+	if bucketFound {
+		stream.WriteArrayEnd()
+	}
+	stream.WriteObjectEnd()
+}
+
+func marshalJSONIsEmpty(ptr unsafe.Pointer) bool {
 	return false
 }
 
 const (
-	statusAPIError = 422
-
 	apiPrefix = "/api/v1"
 
 	epAlerts          = apiPrefix + "/alerts"
 	epAlertManagers   = apiPrefix + "/alertmanagers"
 	epQuery           = apiPrefix + "/query"
 	epQueryRange      = apiPrefix + "/query_range"
+	epQueryExemplars  = apiPrefix + "/query_exemplars"
 	epLabels          = apiPrefix + "/labels"
 	epLabelValues     = apiPrefix + "/label/:name/values"
 	epSeries          = apiPrefix + "/series"
@@ -137,6 +377,10 @@ const (
 	epCleanTombstones = apiPrefix + "/admin/tsdb/clean_tombstones"
 	epConfig          = apiPrefix + "/status/config"
 	epFlags           = apiPrefix + "/status/flags"
+	epBuildinfo       = apiPrefix + "/status/buildinfo"
+	epRuntimeinfo     = apiPrefix + "/status/runtimeinfo"
+	epTSDB            = apiPrefix + "/status/tsdb"
+	epWalReplay       = apiPrefix + "/status/walreplay"
 )
 
 // AlertState models the state of an alert.
@@ -227,19 +471,25 @@ type API interface {
 	// Config returns the current Prometheus configuration.
 	Config(ctx context.Context) (ConfigResult, error)
 	// DeleteSeries deletes data for a selection of series in a time range.
-	DeleteSeries(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) error
+	DeleteSeries(ctx context.Context, matches []string, startTime, endTime time.Time) error
 	// Flags returns the flag values that Prometheus was launched with.
 	Flags(ctx context.Context) (FlagsResult, error)
-	// LabelNames returns all the unique label names present in the block in sorted order.
-	LabelNames(ctx context.Context) ([]string, Warnings, error)
-	// LabelValues performs a query for the values of the given label.
-	LabelValues(ctx context.Context, label string) (model.LabelValues, Warnings, error)
+	// LabelNames returns the unique label names present in the block in sorted order by given time range and matchers.
+	LabelNames(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...Option) ([]string, Warnings, error)
+	// LabelValues performs a query for the values of the given label, time range and matchers.
+	LabelValues(ctx context.Context, label string, matches []string, startTime, endTime time.Time, opts ...Option) (model.LabelValues, Warnings, error)
 	// Query performs a query for the given time.
-	Query(ctx context.Context, query string, ts time.Time) (model.Value, Warnings, error)
+	Query(ctx context.Context, query string, ts time.Time, opts ...Option) (model.Value, Warnings, error)
 	// QueryRange performs a query for the given range.
-	QueryRange(ctx context.Context, query string, r Range) (model.Value, Warnings, error)
+	QueryRange(ctx context.Context, query string, r Range, opts ...Option) (model.Value, Warnings, error)
+	// QueryExemplars performs a query for exemplars by the given query and time range.
+	QueryExemplars(ctx context.Context, query string, startTime, endTime time.Time) ([]ExemplarQueryResult, error)
+	// Buildinfo returns various build information properties about the Prometheus server
+	Buildinfo(ctx context.Context) (BuildinfoResult, error)
+	// Runtimeinfo returns the various runtime information properties about the Prometheus server.
+	Runtimeinfo(ctx context.Context) (RuntimeinfoResult, error)
 	// Series finds series by label matchers.
-	Series(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) ([]model.LabelSet, Warnings, error)
+	Series(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...Option) ([]model.LabelSet, Warnings, error)
 	// Snapshot creates a snapshot of all current data into snapshots/<datetime>-<rand>
 	// under the TSDB's data directory and returns the directory as response.
 	Snapshot(ctx context.Context, skipHead bool) (SnapshotResult, error)
@@ -248,9 +498,13 @@ type API interface {
 	// Targets returns an overview of the current state of the Prometheus target discovery.
 	Targets(ctx context.Context) (TargetsResult, error)
 	// TargetsMetadata returns metadata about metrics currently scraped by the target.
-	TargetsMetadata(ctx context.Context, matchTarget string, metric string, limit string) ([]MetricMetadata, error)
+	TargetsMetadata(ctx context.Context, matchTarget, metric, limit string) ([]MetricMetadata, error)
 	// Metadata returns metadata about metrics currently scraped by the metric name.
-	Metadata(ctx context.Context, metric string, limit string) (map[string][]Metadata, error)
+	Metadata(ctx context.Context, metric, limit string) (map[string][]Metadata, error)
+	// TSDB returns the cardinality statistics.
+	TSDB(ctx context.Context, opts ...Option) (TSDBResult, error)
+	// WalReplay returns the current replay status of the wal.
+	WalReplay(ctx context.Context) (WalReplayStatus, error)
 }
 
 // AlertsResult contains the result from querying the alerts endpoint.
@@ -277,6 +531,30 @@ type ConfigResult struct {
 // FlagsResult contains the result from querying the flag endpoint.
 type FlagsResult map[string]string
 
+// BuildinfoResult contains the results from querying the buildinfo endpoint.
+type BuildinfoResult struct {
+	Version   string `json:"version"`
+	Revision  string `json:"revision"`
+	Branch    string `json:"branch"`
+	BuildUser string `json:"buildUser"`
+	BuildDate string `json:"buildDate"`
+	GoVersion string `json:"goVersion"`
+}
+
+// RuntimeinfoResult contains the result from querying the runtimeinfo endpoint.
+type RuntimeinfoResult struct {
+	StartTime           time.Time `json:"startTime"`
+	CWD                 string    `json:"CWD"`
+	ReloadConfigSuccess bool      `json:"reloadConfigSuccess"`
+	LastConfigTime      time.Time `json:"lastConfigTime"`
+	CorruptionCount     int       `json:"corruptionCount"`
+	GoroutineCount      int       `json:"goroutineCount"`
+	GOMAXPROCS          int       `json:"GOMAXPROCS"`
+	GOGC                string    `json:"GOGC"`
+	GODEBUG             string    `json:"GODEBUG"`
+	StorageRetention    string    `json:"storageRetention"`
+}
+
 // SnapshotResult contains the result from querying the snapshot endpoint.
 type SnapshotResult struct {
 	Name string `json:"name"`
@@ -299,35 +577,41 @@ type RuleGroup struct {
 // that rules are returned in by the API.
 //
 // Rule types can be determined using a type switch:
-//   switch v := rule.(type) {
-//   case RecordingRule:
-//   	fmt.Print("got a recording rule")
-//   case AlertingRule:
-//   	fmt.Print("got a alerting rule")
-//   default:
-//   	fmt.Printf("unknown rule type %s", v)
-//   }
+//
+//	switch v := rule.(type) {
+//	case RecordingRule:
+//		fmt.Print("got a recording rule")
+//	case AlertingRule:
+//		fmt.Print("got a alerting rule")
+//	default:
+//		fmt.Printf("unknown rule type %s", v)
+//	}
 type Rules []interface{}
 
 // AlertingRule models a alerting rule.
 type AlertingRule struct {
-	Name        string         `json:"name"`
-	Query       string         `json:"query"`
-	Duration    float64        `json:"duration"`
-	Labels      model.LabelSet `json:"labels"`
-	Annotations model.LabelSet `json:"annotations"`
-	Alerts      []*Alert       `json:"alerts"`
-	Health      RuleHealth     `json:"health"`
-	LastError   string         `json:"lastError,omitempty"`
+	Name           string         `json:"name"`
+	Query          string         `json:"query"`
+	Duration       float64        `json:"duration"`
+	Labels         model.LabelSet `json:"labels"`
+	Annotations    model.LabelSet `json:"annotations"`
+	Alerts         []*Alert       `json:"alerts"`
+	Health         RuleHealth     `json:"health"`
+	LastError      string         `json:"lastError,omitempty"`
+	EvaluationTime float64        `json:"evaluationTime"`
+	LastEvaluation time.Time      `json:"lastEvaluation"`
+	State          string         `json:"state"`
 }
 
 // RecordingRule models a recording rule.
 type RecordingRule struct {
-	Name      string         `json:"name"`
-	Query     string         `json:"query"`
-	Labels    model.LabelSet `json:"labels,omitempty"`
-	Health    RuleHealth     `json:"health"`
-	LastError string         `json:"lastError,omitempty"`
+	Name           string         `json:"name"`
+	Query          string         `json:"query"`
+	Labels         model.LabelSet `json:"labels,omitempty"`
+	Health         RuleHealth     `json:"health"`
+	LastError      string         `json:"lastError,omitempty"`
+	EvaluationTime float64        `json:"evaluationTime"`
+	LastEvaluation time.Time      `json:"lastEvaluation"`
 }
 
 // Alert models an active alert.
@@ -347,12 +631,15 @@ type TargetsResult struct {
 
 // ActiveTarget models an active Prometheus scrape target.
 type ActiveTarget struct {
-	DiscoveredLabels map[string]string `json:"discoveredLabels"`
-	Labels           model.LabelSet    `json:"labels"`
-	ScrapeURL        string            `json:"scrapeUrl"`
-	LastError        string            `json:"lastError"`
-	LastScrape       time.Time         `json:"lastScrape"`
-	Health           HealthStatus      `json:"health"`
+	DiscoveredLabels   map[string]string `json:"discoveredLabels"`
+	Labels             model.LabelSet    `json:"labels"`
+	ScrapePool         string            `json:"scrapePool"`
+	ScrapeURL          string            `json:"scrapeUrl"`
+	GlobalURL          string            `json:"globalUrl"`
+	LastError          string            `json:"lastError"`
+	LastScrape         time.Time         `json:"lastScrape"`
+	LastScrapeDuration float64           `json:"lastScrapeDuration"`
+	Health             HealthStatus      `json:"health"`
 }
 
 // DroppedTarget models a dropped Prometheus scrape target.
@@ -383,6 +670,37 @@ type queryResult struct {
 
 	// The decoded value.
 	v model.Value
+}
+
+// TSDBResult contains the result from querying the tsdb endpoint.
+type TSDBResult struct {
+	HeadStats                   TSDBHeadStats `json:"headStats"`
+	SeriesCountByMetricName     []Stat        `json:"seriesCountByMetricName"`
+	LabelValueCountByLabelName  []Stat        `json:"labelValueCountByLabelName"`
+	MemoryInBytesByLabelName    []Stat        `json:"memoryInBytesByLabelName"`
+	SeriesCountByLabelValuePair []Stat        `json:"seriesCountByLabelValuePair"`
+}
+
+// TSDBHeadStats contains TSDB stats
+type TSDBHeadStats struct {
+	NumSeries     int `json:"numSeries"`
+	NumLabelPairs int `json:"numLabelPairs"`
+	ChunkCount    int `json:"chunkCount"`
+	MinTime       int `json:"minTime"`
+	MaxTime       int `json:"maxTime"`
+}
+
+// WalReplayStatus represents the wal replay status.
+type WalReplayStatus struct {
+	Min     int `json:"min"`
+	Max     int `json:"max"`
+	Current int `json:"current"`
+}
+
+// Stat models information about statistic value.
+type Stat struct {
+	Name  string `json:"name"`
+	Value uint64 `json:"value"`
 }
 
 func (rg *RuleGroup) UnmarshalJSON(b []byte) error {
@@ -433,14 +751,17 @@ func (r *AlertingRule) UnmarshalJSON(b []byte) error {
 	}
 
 	rule := struct {
-		Name        string         `json:"name"`
-		Query       string         `json:"query"`
-		Duration    float64        `json:"duration"`
-		Labels      model.LabelSet `json:"labels"`
-		Annotations model.LabelSet `json:"annotations"`
-		Alerts      []*Alert       `json:"alerts"`
-		Health      RuleHealth     `json:"health"`
-		LastError   string         `json:"lastError,omitempty"`
+		Name           string         `json:"name"`
+		Query          string         `json:"query"`
+		Duration       float64        `json:"duration"`
+		Labels         model.LabelSet `json:"labels"`
+		Annotations    model.LabelSet `json:"annotations"`
+		Alerts         []*Alert       `json:"alerts"`
+		Health         RuleHealth     `json:"health"`
+		LastError      string         `json:"lastError,omitempty"`
+		EvaluationTime float64        `json:"evaluationTime"`
+		LastEvaluation time.Time      `json:"lastEvaluation"`
+		State          string         `json:"state"`
 	}{}
 	if err := json.Unmarshal(b, &rule); err != nil {
 		return err
@@ -453,6 +774,9 @@ func (r *AlertingRule) UnmarshalJSON(b []byte) error {
 	r.Duration = rule.Duration
 	r.Labels = rule.Labels
 	r.LastError = rule.LastError
+	r.EvaluationTime = rule.EvaluationTime
+	r.LastEvaluation = rule.LastEvaluation
+	r.State = rule.State
 
 	return nil
 }
@@ -472,11 +796,13 @@ func (r *RecordingRule) UnmarshalJSON(b []byte) error {
 	}
 
 	rule := struct {
-		Name      string         `json:"name"`
-		Query     string         `json:"query"`
-		Labels    model.LabelSet `json:"labels,omitempty"`
-		Health    RuleHealth     `json:"health"`
-		LastError string         `json:"lastError,omitempty"`
+		Name           string         `json:"name"`
+		Query          string         `json:"query"`
+		Labels         model.LabelSet `json:"labels,omitempty"`
+		Health         RuleHealth     `json:"health"`
+		LastError      string         `json:"lastError,omitempty"`
+		EvaluationTime float64        `json:"evaluationTime"`
+		LastEvaluation time.Time      `json:"lastEvaluation"`
 	}{}
 	if err := json.Unmarshal(b, &rule); err != nil {
 		return err
@@ -486,6 +812,8 @@ func (r *RecordingRule) UnmarshalJSON(b []byte) error {
 	r.Name = rule.Name
 	r.LastError = rule.LastError
 	r.Query = rule.Query
+	r.EvaluationTime = rule.EvaluationTime
+	r.LastEvaluation = rule.LastEvaluation
 
 	return nil
 }
@@ -523,6 +851,18 @@ func (qr *queryResult) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// Exemplar is additional information associated with a time series.
+type Exemplar struct {
+	Labels    model.LabelSet    `json:"labels"`
+	Value     model.SampleValue `json:"value"`
+	Timestamp model.Time        `json:"timestamp"`
+}
+
+type ExemplarQueryResult struct {
+	SeriesLabels model.LabelSet `json:"seriesLabels"`
+	Exemplars    []Exemplar     `json:"exemplars"`
+}
+
 // NewAPI returns a new API for the client.
 //
 // It is safe to use the returned API from multiple goroutines.
@@ -552,7 +892,8 @@ func (h *httpAPI) Alerts(ctx context.Context) (AlertsResult, error) {
 	}
 
 	var res AlertsResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
 func (h *httpAPI) AlertManagers(ctx context.Context) (AlertManagersResult, error) {
@@ -569,7 +910,8 @@ func (h *httpAPI) AlertManagers(ctx context.Context) (AlertManagersResult, error
 	}
 
 	var res AlertManagersResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
 func (h *httpAPI) CleanTombstones(ctx context.Context) error {
@@ -598,10 +940,11 @@ func (h *httpAPI) Config(ctx context.Context) (ConfigResult, error) {
 	}
 
 	var res ConfigResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
-func (h *httpAPI) DeleteSeries(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) error {
+func (h *httpAPI) DeleteSeries(ctx context.Context, matches []string, startTime, endTime time.Time) error {
 	u := h.client.URL(epDeleteSeries, nil)
 	q := u.Query()
 
@@ -609,8 +952,12 @@ func (h *httpAPI) DeleteSeries(ctx context.Context, matches []string, startTime 
 		q.Add("match[]", m)
 	}
 
-	q.Set("start", formatTime(startTime))
-	q.Set("end", formatTime(endTime))
+	if !startTime.IsZero() {
+		q.Set("start", formatTime(startTime))
+	}
+	if !endTime.IsZero() {
+		q.Set("end", formatTime(endTime))
+	}
 
 	u.RawQuery = q.Encode()
 
@@ -637,25 +984,85 @@ func (h *httpAPI) Flags(ctx context.Context) (FlagsResult, error) {
 	}
 
 	var res FlagsResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
-func (h *httpAPI) LabelNames(ctx context.Context) ([]string, Warnings, error) {
-	u := h.client.URL(epLabels, nil)
+func (h *httpAPI) Buildinfo(ctx context.Context) (BuildinfoResult, error) {
+	u := h.client.URL(epBuildinfo, nil)
+
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, nil, err
+		return BuildinfoResult{}, err
 	}
-	_, body, w, err := h.client.Do(ctx, req)
+
+	_, body, _, err := h.client.Do(ctx, req)
+	if err != nil {
+		return BuildinfoResult{}, err
+	}
+
+	var res BuildinfoResult
+	err = json.Unmarshal(body, &res)
+	return res, err
+}
+
+func (h *httpAPI) Runtimeinfo(ctx context.Context) (RuntimeinfoResult, error) {
+	u := h.client.URL(epRuntimeinfo, nil)
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return RuntimeinfoResult{}, err
+	}
+
+	_, body, _, err := h.client.Do(ctx, req)
+	if err != nil {
+		return RuntimeinfoResult{}, err
+	}
+
+	var res RuntimeinfoResult
+	err = json.Unmarshal(body, &res)
+	return res, err
+}
+
+func (h *httpAPI) LabelNames(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...Option) ([]string, Warnings, error) {
+	u := h.client.URL(epLabels, nil)
+	q := addOptionalURLParams(u.Query(), opts)
+
+	if !startTime.IsZero() {
+		q.Set("start", formatTime(startTime))
+	}
+	if !endTime.IsZero() {
+		q.Set("end", formatTime(endTime))
+	}
+	for _, m := range matches {
+		q.Add("match[]", m)
+	}
+
+	_, body, w, err := h.client.DoGetFallback(ctx, u, q)
 	if err != nil {
 		return nil, w, err
 	}
 	var labelNames []string
-	return labelNames, w, json.Unmarshal(body, &labelNames)
+	err = json.Unmarshal(body, &labelNames)
+	return labelNames, w, err
 }
 
-func (h *httpAPI) LabelValues(ctx context.Context, label string) (model.LabelValues, Warnings, error) {
+func (h *httpAPI) LabelValues(ctx context.Context, label string, matches []string, startTime, endTime time.Time, opts ...Option) (model.LabelValues, Warnings, error) {
 	u := h.client.URL(epLabelValues, map[string]string{"name": label})
+	q := addOptionalURLParams(u.Query(), opts)
+
+	if !startTime.IsZero() {
+		q.Set("start", formatTime(startTime))
+	}
+	if !endTime.IsZero() {
+		q.Set("end", formatTime(endTime))
+	}
+	for _, m := range matches {
+		q.Add("match[]", m)
+	}
+
+	u.RawQuery = q.Encode()
+
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, nil, err
@@ -665,12 +1072,53 @@ func (h *httpAPI) LabelValues(ctx context.Context, label string) (model.LabelVal
 		return nil, w, err
 	}
 	var labelValues model.LabelValues
-	return labelValues, w, json.Unmarshal(body, &labelValues)
+	err = json.Unmarshal(body, &labelValues)
+	return labelValues, w, err
 }
 
-func (h *httpAPI) Query(ctx context.Context, query string, ts time.Time) (model.Value, Warnings, error) {
+type apiOptions struct {
+	timeout time.Duration
+	limit   uint64
+}
+
+type Option func(c *apiOptions)
+
+// WithTimeout can be used to provide an optional query evaluation timeout for Query and QueryRange.
+// https://prometheus.io/docs/prometheus/latest/querying/api/#instant-queries
+func WithTimeout(timeout time.Duration) Option {
+	return func(o *apiOptions) {
+		o.timeout = timeout
+	}
+}
+
+// WithLimit provides an optional maximum number of returned entries for APIs that support limit parameter
+// e.g. https://prometheus.io/docs/prometheus/latest/querying/api/#instant-querie:~:text=%3A%20End%20timestamp.-,limit%3D%3Cnumber%3E,-%3A%20Maximum%20number%20of
+func WithLimit(limit uint64) Option {
+	return func(o *apiOptions) {
+		o.limit = limit
+	}
+}
+
+func addOptionalURLParams(q url.Values, opts []Option) url.Values {
+	opt := &apiOptions{}
+	for _, o := range opts {
+		o(opt)
+	}
+
+	if opt.timeout > 0 {
+		q.Set("timeout", opt.timeout.String())
+	}
+
+	if opt.limit > 0 {
+		q.Set("limit", strconv.FormatUint(opt.limit, 10))
+	}
+
+	return q
+}
+
+func (h *httpAPI) Query(ctx context.Context, query string, ts time.Time, opts ...Option) (model.Value, Warnings, error) {
 	u := h.client.URL(epQuery, nil)
-	q := u.Query()
+	q := addOptionalURLParams(u.Query(), opts)
 
 	q.Set("query", query)
 	if !ts.IsZero() {
@@ -683,12 +1131,12 @@ func (h *httpAPI) Query(ctx context.Context, query string, ts time.Time) (model.
 	}
 
 	var qres queryResult
-	return model.Value(qres.v), warnings, json.Unmarshal(body, &qres)
+	return qres.v, warnings, json.Unmarshal(body, &qres)
 }
 
-func (h *httpAPI) QueryRange(ctx context.Context, query string, r Range) (model.Value, Warnings, error) {
+func (h *httpAPI) QueryRange(ctx context.Context, query string, r Range, opts ...Option) (model.Value, Warnings, error) {
 	u := h.client.URL(epQueryRange, nil)
-	q := u.Query()
+	q := addOptionalURLParams(u.Query(), opts)
 
 	q.Set("query", query)
 	q.Set("start", formatTime(r.Start))
@@ -701,29 +1149,25 @@ func (h *httpAPI) QueryRange(ctx context.Context, query string, r Range) (model.
 	}
 
 	var qres queryResult
-
-	return model.Value(qres.v), warnings, json.Unmarshal(body, &qres)
+	return qres.v, warnings, json.Unmarshal(body, &qres)
 }
 
-func (h *httpAPI) Series(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) ([]model.LabelSet, Warnings, error) {
+func (h *httpAPI) Series(ctx context.Context, matches []string, startTime, endTime time.Time, opts ...Option) ([]model.LabelSet, Warnings, error) {
 	u := h.client.URL(epSeries, nil)
-	q := u.Query()
+	q := addOptionalURLParams(u.Query(), opts)
 
 	for _, m := range matches {
 		q.Add("match[]", m)
 	}
 
-	q.Set("start", formatTime(startTime))
-	q.Set("end", formatTime(endTime))
-
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, nil, err
+	if !startTime.IsZero() {
+		q.Set("start", formatTime(startTime))
+	}
+	if !endTime.IsZero() {
+		q.Set("end", formatTime(endTime))
 	}
 
-	_, body, warnings, err := h.client.Do(ctx, req)
+	_, body, warnings, err := h.client.DoGetFallback(ctx, u, q)
 	if err != nil {
 		return nil, warnings, err
 	}
@@ -751,7 +1195,8 @@ func (h *httpAPI) Snapshot(ctx context.Context, skipHead bool) (SnapshotResult, 
 	}
 
 	var res SnapshotResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
 func (h *httpAPI) Rules(ctx context.Context) (RulesResult, error) {
@@ -768,7 +1213,8 @@ func (h *httpAPI) Rules(ctx context.Context) (RulesResult, error) {
 	}
 
 	var res RulesResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
 func (h *httpAPI) Targets(ctx context.Context) (TargetsResult, error) {
@@ -785,10 +1231,11 @@ func (h *httpAPI) Targets(ctx context.Context) (TargetsResult, error) {
 	}
 
 	var res TargetsResult
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
-func (h *httpAPI) TargetsMetadata(ctx context.Context, matchTarget string, metric string, limit string) ([]MetricMetadata, error) {
+func (h *httpAPI) TargetsMetadata(ctx context.Context, matchTarget, metric, limit string) ([]MetricMetadata, error) {
 	u := h.client.URL(epTargetsMetadata, nil)
 	q := u.Query()
 
@@ -809,10 +1256,11 @@ func (h *httpAPI) TargetsMetadata(ctx context.Context, matchTarget string, metri
 	}
 
 	var res []MetricMetadata
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
-func (h *httpAPI) Metadata(ctx context.Context, metric string, limit string) (map[string][]Metadata, error) {
+func (h *httpAPI) Metadata(ctx context.Context, metric, limit string) (map[string][]Metadata, error) {
 	u := h.client.URL(epMetadata, nil)
 	q := u.Query()
 
@@ -832,7 +1280,68 @@ func (h *httpAPI) Metadata(ctx context.Context, metric string, limit string) (ma
 	}
 
 	var res map[string][]Metadata
-	return res, json.Unmarshal(body, &res)
+	err = json.Unmarshal(body, &res)
+	return res, err
+}
+
+func (h *httpAPI) TSDB(ctx context.Context, opts ...Option) (TSDBResult, error) {
+	u := h.client.URL(epTSDB, nil)
+	q := addOptionalURLParams(u.Query(), opts)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return TSDBResult{}, err
+	}
+
+	_, body, _, err := h.client.Do(ctx, req)
+	if err != nil {
+		return TSDBResult{}, err
+	}
+
+	var res TSDBResult
+	err = json.Unmarshal(body, &res)
+	return res, err
+}
+
+func (h *httpAPI) WalReplay(ctx context.Context) (WalReplayStatus, error) {
+	u := h.client.URL(epWalReplay, nil)
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return WalReplayStatus{}, err
+	}
+
+	_, body, _, err := h.client.Do(ctx, req)
+	if err != nil {
+		return WalReplayStatus{}, err
+	}
+
+	var res WalReplayStatus
+	err = json.Unmarshal(body, &res)
+	return res, err
+}
+
+func (h *httpAPI) QueryExemplars(ctx context.Context, query string, startTime, endTime time.Time) ([]ExemplarQueryResult, error) {
+	u := h.client.URL(epQueryExemplars, nil)
+	q := u.Query()
+
+	q.Set("query", query)
+	if !startTime.IsZero() {
+		q.Set("start", formatTime(startTime))
+	}
+	if !endTime.IsZero() {
+		q.Set("end", formatTime(endTime))
+	}
+
+	_, body, _, err := h.client.DoGetFallback(ctx, u, q)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []ExemplarQueryResult
+	err = json.Unmarshal(body, &res)
+	return res, err
 }
 
 // Warnings is an array of non critical errors
@@ -860,7 +1369,7 @@ type apiResponse struct {
 
 func apiError(code int) bool {
 	// These are the codes that Prometheus sends when it returns an error.
-	return code == statusAPIError || code == http.StatusBadRequest
+	return code == http.StatusUnprocessableEntity || code == http.StatusBadRequest
 }
 
 func errorTypeAndMsgFor(resp *http.Response) (ErrorType, string) {
@@ -905,14 +1414,14 @@ func (h *apiClientImpl) Do(ctx context.Context, req *http.Request) (*http.Respon
 		}
 	}
 
-	if apiError(code) != (result.Status == "error") {
+	if apiError(code) && result.Status == "success" {
 		err = &Error{
 			Type: ErrBadResponse,
 			Msg:  "inconsistent body for response code",
 		}
 	}
 
-	if apiError(code) && result.Status == "error" {
+	if result.Status == "error" {
 		err = &Error{
 			Type: result.ErrorType,
 			Msg:  result.Error,
@@ -920,32 +1429,36 @@ func (h *apiClientImpl) Do(ctx context.Context, req *http.Request) (*http.Respon
 	}
 
 	return resp, []byte(result.Data), result.Warnings, err
-
 }
 
-// DoGetFallback will attempt to do the request as-is, and on a 405 it will fallback to a GET request.
+// DoGetFallback will attempt to do the request as-is, and on a 405 or 501 it
+// will fallback to a GET request.
 func (h *apiClientImpl) DoGetFallback(ctx context.Context, u *url.URL, args url.Values) (*http.Response, []byte, Warnings, error) {
-	req, err := http.NewRequest(http.MethodPost, u.String(), strings.NewReader(args.Encode()))
+	encodedArgs := args.Encode()
+	req, err := http.NewRequest(http.MethodPost, u.String(), strings.NewReader(encodedArgs))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Following comment originates from https://pkg.go.dev/net/http#Transport
+	// Transport only retries a request upon encountering a network error if the request is
+	// idempotent and either has no body or has its Request.GetBody defined. HTTP requests
+	// are considered idempotent if they have HTTP methods GET, HEAD, OPTIONS, or TRACE; or
+	// if their Header map contains an "Idempotency-Key" or "X-Idempotency-Key" entry. If the
+	// idempotency key value is a zero-length slice, the request is treated as idempotent but
+	// the header is not sent on the wire.
+	req.Header["Idempotency-Key"] = nil
 
 	resp, body, warnings, err := h.Do(ctx, req)
-	if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
-		u.RawQuery = args.Encode()
+	if resp != nil && (resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented) {
+		u.RawQuery = encodedArgs
 		req, err = http.NewRequest(http.MethodGet, u.String(), nil)
 		if err != nil {
 			return nil, nil, warnings, err
 		}
-
-	} else {
-		if err != nil {
-			return resp, body, warnings, err
-		}
-		return resp, body, warnings, nil
+		return h.Do(ctx, req)
 	}
-	return h.Do(ctx, req)
+	return resp, body, warnings, err
 }
 
 func formatTime(t time.Time) string {
