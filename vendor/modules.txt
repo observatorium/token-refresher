@@ -129,8 +129,8 @@ github.com/gogo/protobuf/types
 # github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6
 ## explicit
 github.com/golang/groupcache/lru
-# github.com/golang/protobuf v1.5.0
-## explicit; go 1.9
+# github.com/golang/protobuf v1.5.4
+## explicit; go 1.17
 github.com/golang/protobuf/descriptor
 github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
