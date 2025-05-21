@@ -1,3 +1,17 @@
+// Copyright 2021 by the contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package internalserver
 
 import (
@@ -53,7 +67,8 @@ func (h *Handler) AddEndpoint(pattern string, description string, handler http.H
 }
 
 func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
-	html := "<html><head><title>Internal</title></head><body>\n"
+	html := fmt.Sprintf("<html><head><title>%s</title></head><body>\n", h.name)
+	html += fmt.Sprintf("<h1>%s</h1>\n", h.name)
 
 	for _, e := range h.endpoints {
 		html += fmt.Sprintf("<p><a href='%s'>%s - %s</a></p>\n", e.Pattern, e.Pattern, e.Description)
@@ -61,7 +76,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) {
 	html += `</body></html>`
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
+	_, _ = w.Write([]byte(html))
 }
 
 // Option is a func that modifies the configuration for the internalserver handler.

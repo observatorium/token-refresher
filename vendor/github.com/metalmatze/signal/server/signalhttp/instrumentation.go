@@ -1,3 +1,17 @@
+// Copyright 2021 by the contributors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package signalhttp
 
 import (
@@ -50,7 +64,7 @@ func NewHandlerInstrumenter(r prometheus.Registerer, extraLabels []string) Handl
 			prometheus.HistogramOpts{
 				Name:    "http_response_size_bytes",
 				Help:    "Histogram of response size for HTTP requests.",
-				Buckets: prometheus.ExponentialBuckets(100, 10, 8), //nolint:gomnd
+				Buckets: prometheus.ExponentialBuckets(100, 10, 8),
 			},
 			labels,
 		),

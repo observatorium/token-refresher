@@ -91,7 +91,7 @@ func (s *basicHandler) handle(w http.ResponseWriter, r *http.Request, checks ...
 	// if ?hide=1, return an empty body. Kubernetes only cares about the
 	// HTTP status code, so we won't waste bytes on the full body.
 	if r.URL.Query().Get("hide") == "1" {
-		w.Write([]byte("{}\n"))
+		_, _ = w.Write([]byte("{}\n"))
 		return
 	}
 
@@ -99,5 +99,5 @@ func (s *basicHandler) handle(w http.ResponseWriter, r *http.Request, checks ...
 	// shouldn't really be possible since we're encoding a map[string]string).
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "    ")
-	encoder.Encode(checkResults)
+	_ = encoder.Encode(checkResults)
 }

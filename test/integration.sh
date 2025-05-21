@@ -30,7 +30,7 @@ curl \
     http://127.0.0.1:4445/clients
 
 (
-  observatorium \
+  api \
     --web.listen=0.0.0.0:8443 \
     --web.internal.listen=0.0.0.0:8448 \
     --web.healthchecks.url=http://127.0.0.1:8443 \
