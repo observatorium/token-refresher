@@ -4,8 +4,6 @@ RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-c
 
 ADD . /opt
 WORKDIR /opt
-# Run this before `make token-refresher` to be friendy with Docker image layer cache.
-RUN make vendor
 
 ARG TARGETOS TARGETARCH
 
