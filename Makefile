@@ -18,29 +18,24 @@ DOCKER_REPO ?= quay.io/observatorium/token-refresher
 
 THANOS ?= $(BIN_DIR)/thanos
 THANOS_VERSION ?= 0.13.0
-OBSERVATORIUM ?= $(BIN_DIR)/observatorium
-UP ?= $(BIN_DIR)/up
 HYDRA ?= $(BIN_DIR)/hydra
 GOLANGCILINT ?= $(FIRST_GOPATH)/bin/golangci-lint
 GOLANGCILINT_VERSION ?= v1.21.0
-EMBEDMD ?= $(BIN_DIR)/embedmd
 SHELLCHECK ?= $(BIN_DIR)/shellcheck
 MEMCACHED ?= $(BIN_DIR)/memcached
 
 default: token-refresher
 all: clean lint test token-refresher
 
-tmp/help.txt: token-refresher
-	./token-refresher --help 2>&1 | head -n -1 > tmp/help.txt || true
-
-README.md: $(EMBEDMD) tmp/help.txt
-	$(EMBEDMD) -w README.md
+.PHONY: README.md
+README.md: token-refresher $(MDOX)
+	$(MDOX) fmt $(@)
 
 token-refresher: main.go $(wildcard *.go) $(wildcard */*.go)
 	CGO_ENABLED=0 GOEXPERIMENT=boringcrypto GOOS=$(OS) GOARCH=$(GOARCH) GO111MODULE=on GOPROXY=https://proxy.golang.org go build -a -ldflags '-s -w' -o $@ .
 
 .PHONY: build
-build: token-refresher
+build: token-refresher README.md
 
 .PHONY: format
 format: $(GOLANGCILINT)
@@ -67,7 +62,7 @@ test-unit:
 
 .PHONY: test-integration
 test-integration: build integration-test-dependencies
-	PATH=$(BIN_DIR):$(FIRST_GOPATH)/bin:$$PATH LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:$(LIB_DIR) ./test/integration.sh
+	PATH=$(BIN_DIR):$(FIRST_GOPATH)/bin:$$PATH LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:$(LIB_DIR) UP=$(UP) OBSERVATORIUM=$(OBSERVATORIUM) ./test/integration.sh
 
 .PHONY: clean
 clean:
@@ -161,18 +156,9 @@ $(THANOS): | $(BIN_DIR)
 	@echo "Downloading Thanos"
 	curl -L "https://github.com/thanos-io/thanos/releases/download/v$(THANOS_VERSION)/thanos-$(THANOS_VERSION).$$(go env GOOS)-$$(go env GOARCH).tar.gz" | tar --strip-components=1 -xzf - -C $(BIN_DIR)
 
-$(OBSERVATORIUM): | $(BIN_DIR)
-	go build -o $@ github.com/observatorium/observatorium
-
-$(UP): | $(BIN_DIR)
-	go build -o $@ github.com/observatorium/up/cmd/up
-
 $(HYDRA): | $(BIN_DIR)
 	@echo "Downloading Hydra"
 	curl -L "https://github.com/ory/hydra/releases/download/v1.7.4/hydra_1.7.4_linux_64-bit.tar.gz" | tar -xzf - -C $(BIN_DIR) hydra
-
-$(EMBEDMD): | $(BIN_DIR)
-	go build -o $@ github.com/campoy/embedmd
 
 $(GOLANGCILINT):
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/$(GOLANGCILINT_VERSION)/install.sh \
