@@ -16,8 +16,6 @@ VCS_BRANCH := $(strip $(shell git rev-parse --abbrev-ref HEAD))
 VCS_REF := $(strip $(shell [ -d .git ] && git rev-parse --short HEAD))
 DOCKER_REPO ?= quay.io/observatorium/token-refresher
 
-THANOS ?= $(BIN_DIR)/thanos
-THANOS_VERSION ?= 0.13.0
 HYDRA ?= $(BIN_DIR)/hydra
 GOLANGCILINT ?= $(FIRST_GOPATH)/bin/golangci-lint
 GOLANGCILINT_VERSION ?= v1.21.0
@@ -62,7 +60,7 @@ test-unit:
 
 .PHONY: test-integration
 test-integration: build integration-test-dependencies
-	PATH=$(BIN_DIR):$(FIRST_GOPATH)/bin:$$PATH LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:$(LIB_DIR) UP=$(UP) OBSERVATORIUM=$(OBSERVATORIUM) ./test/integration.sh
+	PATH=$(BIN_DIR):$(FIRST_GOPATH)/bin:$$PATH LD_LIBRARY_PATH=$$LD_LIBRARY_PATH:$(LIB_DIR) UP=$(UP) OBSERVATORIUM=$(OBSERVATORIUM) THANOS=$(THANOS) ./test/integration.sh
 
 .PHONY: clean
 clean:
@@ -151,10 +149,6 @@ $(BIN_DIR):
 
 $(LIB_DIR):
 	mkdir -p $@
-
-$(THANOS): | $(BIN_DIR)
-	@echo "Downloading Thanos"
-	curl -L "https://github.com/thanos-io/thanos/releases/download/v$(THANOS_VERSION)/thanos-$(THANOS_VERSION).$$(go env GOOS)-$$(go env GOARCH).tar.gz" | tar --strip-components=1 -xzf - -C $(BIN_DIR)
 
 $(HYDRA): | $(BIN_DIR)
 	@echo "Downloading Hydra"
