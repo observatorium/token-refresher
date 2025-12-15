@@ -64,7 +64,7 @@ jobs:
           cache: true
 
       - name: Build the Go binary.
-        run: make token-refresher
+        run: make build
 
       - name: Check if repo is dirty.
         run: git diff --exit-code
