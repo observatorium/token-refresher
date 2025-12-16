@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/coreos/go-oidc v2.2.1+incompatible
-	github.com/go-kit/kit v0.10.0
+	github.com/go-kit/kit v0.13.0
 	github.com/metalmatze/signal v0.0.0-20201002154727-d0c16e42a3cf
 	github.com/oklog/run v1.1.0
 	github.com/prometheus/client_golang v1.23.2
@@ -15,7 +15,8 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/go-logfmt/logfmt v0.5.0 // indirect
+	github.com/go-kit/log v0.2.0 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
