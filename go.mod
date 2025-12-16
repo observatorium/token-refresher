@@ -3,7 +3,7 @@ module github.com/observatorium/token-refresher
 go 1.23.0
 
 require (
-	github.com/coreos/go-oidc v2.2.1+incompatible
+	github.com/coreos/go-oidc v2.4.0+incompatible
 	github.com/go-kit/kit v0.13.0
 	github.com/metalmatze/signal v0.0.0-20201002154727-d0c16e42a3cf
 	github.com/oklog/run v1.1.0
@@ -26,5 +26,5 @@ require (
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
-	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
+	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 )
