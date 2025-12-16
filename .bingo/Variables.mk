@@ -41,6 +41,12 @@ $(OBSERVATORIUM): $(BINGO_DIR)/observatorium.mod
 	@echo "(re)installing $(GOBIN)/observatorium-v0.1.2"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=observatorium.mod -o=$(GOBIN)/observatorium-v0.1.2 "github.com/observatorium/api"
 
+THANOS := $(GOBIN)/thanos-v0.39.2
+$(THANOS): $(BINGO_DIR)/thanos.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/thanos-v0.39.2"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=thanos.mod -o=$(GOBIN)/thanos-v0.39.2 "github.com/thanos-io/thanos/cmd/thanos"
+
 UP := $(GOBIN)/up-v0.0.0-20240109123005-e1e1857b0b6e
 $(UP): $(BINGO_DIR)/up.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
