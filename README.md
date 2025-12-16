@@ -34,5 +34,4 @@ Usage of ./token-refresher:
       --url string                        The target URL to which to proxy requests. All requests will have the acces token in the Authorization HTTP header. (DEPRECATED: Use -upstream.url instead)
       --web.internal.listen string        The address on which the internal server listens. (default ":8081")
       --web.listen string                 The address on which the proxy server listens. (default ":8080")
-pflag: help requested
 ```
