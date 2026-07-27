@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	stdlog "log"
 	"net/http"
 	"net/http/httputil"
@@ -18,13 +17,14 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/metalmatze/signal/healthcheck"
 	"github.com/metalmatze/signal/internalserver"
 	"github.com/metalmatze/signal/server/signalhttp"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	flag "github.com/spf13/pflag"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -81,7 +81,7 @@ func lookupEnvOrDuration(key string, defaultVal time.Duration) time.Duration {
 	if val, ok := os.LookupEnv(key); ok {
 		d, err := time.ParseDuration(val)
 		if err != nil {
-			fmt.Sprintln("error trying to parse duration, using default value: ", err)
+			fmt.Println("error trying to parse duration, using default value: ", err)
 			return defaultVal
 		}
 		return d
@@ -181,8 +181,8 @@ func main() {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
-		prometheus.NewGoCollector(),
-		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
 	level.Info(logger).Log("msg", "token-refresher")
@@ -264,7 +264,7 @@ func main() {
 					case !t.Valid():
 						level.Error(logger).Log("msg", "token is invalid", "exp", t.Expiry.String())
 					default:
-						if err := ioutil.WriteFile(cfg.tempFile, []byte(t.AccessToken), 0644); err != nil {
+						if err := os.WriteFile(cfg.tempFile, []byte(t.AccessToken), 0644); err != nil {
 							level.Error(logger).Log("msg", "failed to write token to temporary file", "err", err)
 							break
 						}
@@ -272,7 +272,7 @@ func main() {
 							level.Error(logger).Log("msg", "failed to write token to file", "err", err)
 							break
 						}
-						d = t.Expiry.Sub(time.Now()) - cfg.margin
+						d = time.Until(t.Expiry) - cfg.margin
 					}
 					select {
 					case <-time.NewTimer(d).C:
@@ -304,7 +304,7 @@ func main() {
 
 			base := http.DefaultTransport
 			if cfg.upstream.caFile != "" {
-				caCert, err := ioutil.ReadFile(cfg.upstream.caFile)
+				caCert, err := os.ReadFile(cfg.upstream.caFile)
 				if err != nil {
 					stdlog.Fatalf("failed to initialize upstream server TLS CA: %v", err)
 				}

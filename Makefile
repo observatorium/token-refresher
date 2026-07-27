@@ -18,7 +18,7 @@ DOCKER_REPO ?= quay.io/observatorium/token-refresher
 
 HYDRA ?= $(BIN_DIR)/hydra
 GOLANGCILINT ?= $(FIRST_GOPATH)/bin/golangci-lint
-GOLANGCILINT_VERSION ?= v1.21.0
+GOLANGCILINT_VERSION ?= v2.12.2
 SHELLCHECK ?= $(BIN_DIR)/shellcheck
 MEMCACHED ?= $(BIN_DIR)/memcached
 
@@ -37,7 +37,7 @@ build: token-refresher README.md
 
 .PHONY: format
 format: $(GOLANGCILINT)
-	$(GOLANGCILINT) run --fix --enable-all -c .golangci.yml
+	$(GOLANGCILINT) run --fix -c .golangci.yml
 
 .PHONY: go-fmt
 go-fmt:
@@ -49,7 +49,7 @@ shellcheck: $(SHELLCHECK)
 
 .PHONY: lint
 lint: $(GOLANGCILINT) go-fmt shellcheck
-	$(GOLANGCILINT) run -v --enable-all -c .golangci.yml
+	$(GOLANGCILINT) run -v -c .golangci.yml
 
 .PHONY: test
 test: build test-unit test-integration
