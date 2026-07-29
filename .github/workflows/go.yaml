@@ -14,13 +14,10 @@ jobs:
       - name: Checkout code into the Go module directory.
         uses: actions/checkout@v6
 
-      - name: Import environment variables from file
-        run: cat ".github/env" >> $GITHUB_ENV
-
       - name: Install Go
         uses: actions/setup-go@v6
         with:
-          go-version: '${{ env.golang-version }}'
+          go-version-file: 'go.mod'
 
       - name: Run source code linting.
         run: make lint
@@ -54,14 +51,10 @@ jobs:
       - name: Checkout code into the Go module directory.
         uses: actions/checkout@v6
 
-      - name: Import environment variables from file
-        run: cat ".github/env" >> $GITHUB_ENV
-
       - name: Install Go
         uses: actions/setup-go@v6
         with:
-          go-version: '${{ env.golang-version }}'
-          cache: true
+          go-version-file: 'go.mod'
 
       - name: Build the Go binary.
         run: make build
@@ -79,14 +72,10 @@ jobs:
       - name: Checkout code into the Go module directory.
         uses: actions/checkout@v6
 
-      - name: Import environment variables from file
-        run: cat ".github/env" >> $GITHUB_ENV
-
       - name: Install Go
         uses: actions/setup-go@v6
         with:
-          go-version: '${{ env.golang-version }}'
-          cache: true
+          go-version-file: 'go.mod'
 
       - name: Run source code linting.
         run: make manifests
