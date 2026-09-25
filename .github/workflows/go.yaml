@@ -12,7 +12,7 @@ jobs:
     name: Linting Go code.
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Go
         uses: actions/setup-go@v6
@@ -27,7 +27,7 @@ jobs:
     name: Build for all supported archs.
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         id: buildx
@@ -49,7 +49,7 @@ jobs:
     name: Build the Go Binary and run tests.
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Go
         uses: actions/setup-go@v6
@@ -70,7 +70,7 @@ jobs:
     name: Build jsonnet files.
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Go
         uses: actions/setup-go@v6
